@@ -358,6 +358,12 @@ html,body{height:100%;margin:0}
 .top{padding-top:calc(11px + env(safe-area-inset-top,0px))}
 nav.tabs{padding-bottom:max(8px,calc(env(safe-area-inset-bottom,0px) - 8px))}
 @media (min-width:900px){nav.tabs{padding-bottom:26px}}
+
+/* ===== 2.0.6 : app installée (iPhone) : on prend la hauteur réelle de l'écran, pas celle calculée avec la barre de Safari ===== */
+@media (display-mode:standalone){
+  html,body{height:100vh;height:100lvh;min-height:100vh;min-height:100lvh}
+  #app{top:0;bottom:auto;height:100vh;height:100lvh}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -388,7 +394,7 @@ nav.tabs{padding-bottom:max(8px,calc(env(safe-area-inset-bottom,0px) - 8px))}
 <script>
 (function(){
 'use strict';
-var VERSION='2.0.5';
+var VERSION='2.0.6';
 var TRASH_DAYS=30;
 var RAYONS=['Alimentation','Boissons','Frais et surgelés','Ménage et entretien','Hygiène et cosmétique','Parfumerie','Tabac, snus et vape','Accessoires téléphone','Électronique et câbles','Quincaillerie','Vêtements','Papeterie et jouets','Autre'];
 /* Rayons : la liste de base + tous les rayons déjà utilisés par un produit (y compris ceux créés par le gérant) */
