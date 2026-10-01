@@ -167,16 +167,17 @@ nav.tabs[hidden]{display:none}
   <div class="cambar"><button class="btn ghost" data-act="camstop" style="color:#fff;border-color:#555">Annuler</button></div>
 </div>
 <input type="file" id="photo" accept="image/*" hidden>
+<input type="file" id="pphoto" accept="image/*" hidden>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
 (function(){
 'use strict';
-var VERSION='1.0.1';
+var VERSION='1.2.0';
 var RAYONS=['Alimentation','Parfumerie','Cosmétique','Droguerie','Autre'];
-var K={cfg:'mb-config',data:'mb-data',out:'mb-outbox',pull:'mb-lastpull'};
+var K={cfg:'mb-config',data:'mb-data',out:'mb-outbox',pull:'mb-lastpull',mk:'mb-market-ok',ai:'mb-ai'};
 
-var S={screen:'boot',view:'scan',from:'scan',ean:null,products:{},prices:[],outbox:[],
+var S={screen:'boot',view:'scan',from:'scan',ean:null,products:{},prices:[],market:[],marketReady:false,mktOpen:false,ai:{photo:false,lookup:false,known:false},aiChecked:false,outbox:[],
   sync:{state:'idle',msg:''},rayon:'Tous',q:'',msg:'',formOpen:false,editOpen:false,reset:true,
   lookup:{},email:'',busy:false};
 var sb=null;
@@ -211,11 +212,12 @@ function toast(m){var t=document.getElementById('toast');t.textContent=m;t.hidde
 
 /* ================= données locales ================= */
 function loadLocal(){
-  var d=getJ(K.data)||{};S.products=d.products||{};S.prices=d.prices||[];
-  S.outbox=getJ(K.out)||[];
+  var d=getJ(K.data)||{};S.products=d.products||{};S.prices=d.prices||[];S.market=d.market||[];
+  S.outbox=getJ(K.out)||[];S.marketReady=getJ(K.mk)===true;
+  var a=getJ(K.ai);if(a&&typeof a==='object')S.ai={photo:!!a.photo,lookup:!!a.lookup,known:true};
 }
 function saveLocal(){
-  var ok=setJ(K.data,{products:S.products,prices:S.prices});
+  var ok=setJ(K.data,{products:S.products,prices:S.prices,market:S.market});
   setJ(K.out,S.outbox);
   if(!ok)toast('Mémoire du téléphone pleine : libérez de l’espace.');
 }
@@ -251,12 +253,24 @@ function flush(){
   ups.forEach(function(u){p=p.then(function(){return sb.from('products').update(u.patch).eq('ean',u.ean).then(chk);});});
   if(prs.length)p=p.then(function(){return sb.from('prices').upsert(prs,{onConflict:'client_id',ignoreDuplicates:true}).then(chk);});
   return p.then(function(){
-    var done={};ops.forEach(function(o){done[o.id]=1;});
+    var done={};ops.forEach(function(o){if(o.type!=='market')done[o.id]=1;});
     S.outbox=S.outbox.filter(function(o){return !done[o.id];});
     var sent={};prs.forEach(function(r){sent[r.client_id]=1;});
     S.prices.forEach(function(x){if(sent[x.client_id])delete x.pending;});
     prods.forEach(function(r){if(S.products[r.ean])delete S.products[r.ean].pending;});
     saveLocal();
+  }).then(function(){
+    var mks=ops.filter(function(o){return o.type==='market';});
+    if(!mks.length)return;
+    var rows=mks.map(function(o){return o.row;});
+    /* Le carnet du marché ne doit jamais bloquer le reste : en cas d'échec, il reste en attente */
+    return sb.from('market_prices').upsert(rows,{onConflict:'client_id',ignoreDuplicates:true}).then(chk).then(function(){
+      var d2={};mks.forEach(function(o){d2[o.id]=1;});
+      S.outbox=S.outbox.filter(function(o){return !d2[o.id];});
+      var sent={};rows.forEach(function(r){sent[r.client_id]=1;});
+      S.market.forEach(function(x){if(sent[x.client_id])delete x.pending;});
+      saveLocal();
+    }).catch(function(){});
   });
 }
 function pullTable(table,col,since){
@@ -286,8 +300,19 @@ function pull(){
       if(idx[r.client_id]!=null)S.prices[idx[r.client_id]]=x;else{idx[r.client_id]=S.prices.length;S.prices.push(x);}
     });
     if(rows.length)lp.prices=rows[rows.length-1].created_at;
-    setJ(K.pull,lp);saveLocal();render();
+    return pullMarket(lp).then(function(){setJ(K.pull,lp);saveLocal();render();});
   });
+}
+function pullMarket(lp){
+  return pullTable('market_prices','created_at',lp.market).then(function(rows){
+    var idx={};S.market.forEach(function(p,i){idx[p.client_id]=i;});
+    rows.forEach(function(r){
+      var x={client_id:r.client_id,ean:r.ean,source:r.source,price:toNum(r.price),note:r.note||'',recorded_at:r.recorded_at};
+      if(idx[r.client_id]!=null)S.market[idx[r.client_id]]=x;else{idx[r.client_id]=S.market.length;S.market.push(x);}
+    });
+    if(rows.length)lp.market=rows[rows.length-1].created_at;
+    S.marketReady=true;setJ(K.mk,true);
+  }).catch(function(){/* table pas encore créée sur le serveur : le carnet reste masqué */});
 }
 function queue(op){op.id=uuid();S.outbox.push(op);saveLocal();sync();}
 
@@ -303,13 +328,33 @@ function fetchT(url,ms){
     fetch(url).then(function(r){if(done)return;done=true;clearTimeout(t);ok(r);},function(e){if(done)return;done=true;clearTimeout(t);ko(e);});
   });
 }
+function withBrand(name,brand){
+  name=String(name||'').trim();brand=String(brand||'').trim();
+  if(brand&&name.toLowerCase().indexOf(brand.toLowerCase())<0)return brand+' '+name;
+  return name;
+}
+function ensureAi(){
+  if(S.aiChecked||!sb||!navigator.onLine)return Promise.resolve();
+  S.aiChecked=true;
+  return callIdentify({action:'status'}).then(function(r){
+    S.ai=(r.ok&&r.data)?{photo:!!r.data.photo,lookup:!!r.data.lookup,known:true}:{photo:false,lookup:false,known:true};
+    setJ(K.ai,S.ai);
+  });
+}
+function callIdentify(body){
+  if(!sb||!sb.functions)return Promise.resolve({ok:false,status:0});
+  return sb.functions.invoke('identifier',{body:body}).then(function(r){
+    if(r&&r.error){var st=(r.error.context&&r.error.context.status)||0;return {ok:false,status:st};}
+    return {ok:true,data:r.data||{}};
+  }).catch(function(){return {ok:false,status:0};});
+}
 function lookup(code){
   if(S.lookup[code]&&S.lookup[code].state!=='offline')return;
   if(!navigator.onLine){S.lookup[code]={state:'offline'};return;}
   S.lookup[code]={state:'loading'};
-  var i=0;
+  var i=0,tried=[];
   function tryNext(){
-    if(i>=BASES.length){S.lookup[code]={state:'notfound'};return after();}
+    if(i>=BASES.length)return tryServer();
     var b=BASES[i++];
     return fetchT(b.url+'/api/v2/product/'+code+'.json?fields=product_name,product_name_fr,brands,quantity',6000)
       .then(function(r){return r.json();})
@@ -318,11 +363,26 @@ function lookup(code){
         var name=p&&(p.product_name_fr||p.product_name||'').trim();
         if(name){
           if(p.quantity&&name.toLowerCase().indexOf(String(p.quantity).toLowerCase())<0)name+=' '+String(p.quantity).trim();
-          S.lookup[code]={state:'found',name:name,brand:(p.brands||'').split(',')[0].trim(),rayon:b.rayon,source:b.nom};
+          var brd=(p.brands||'').split(',')[0].trim();
+          S.lookup[code]={state:'found',name:withBrand(name,brd),brand:brd,rayon:b.rayon,source:b.nom};
           return after();
         }
-        return tryNext();
-      }).catch(function(){return tryNext();});
+        tried.push(b.nom);return tryNext();
+      }).catch(function(){tried.push(b.nom+' (injoignable)');return tryNext();});
+  }
+  function tryServer(){
+    return ensureAi().then(function(){
+      if(!S.ai.lookup){S.lookup[code]={state:'notfound',tried:tried};return after();}
+      return callIdentify({action:'lookup',ean:code}).then(function(r){
+        if(r.ok&&r.data.found){
+          S.lookup[code]={state:'found',name:withBrand(r.data.name,r.data.brand),brand:r.data.brand||'',rayon:'Autre',source:r.data.source||'Go-UPC'};
+          return after();
+        }
+        tried.push(r.ok?'Go-UPC':'Go-UPC (injoignable)');
+        S.lookup[code]={state:'notfound',tried:tried};
+        return after();
+      });
+    });
   }
   function after(){
     if(S.view!=='new'||S.ean!==code)return;
@@ -330,7 +390,7 @@ function lookup(code){
     if(L.state==='found'){
       var n=document.getElementById('n-name');if(n&&!n.value)n.value=L.name;
       var br=document.getElementById('n-brand');if(br&&!br.value)br.value=L.brand;
-      var ry=document.getElementById('n-rayon');if(ry&&!S.rayonTouched)ry.value=L.rayon;
+      var ry=document.getElementById('n-rayon');if(ry&&!S.rayonTouched&&L.rayon!=='Autre')ry.value=L.rayon;
     }
     var box=document.getElementById('lk');if(box)box.outerHTML=lookupBox(code);
   }
@@ -339,10 +399,47 @@ function lookup(code){
 function lookupBox(code){
   var L=S.lookup[code]||{state:'loading'};
   if(L.state==='loading')return '<p class="info" id="lk">Recherche du nom dans les bases publiques…</p>';
+  if(L.state==='found'&&L.ai)return '<div id="lk"><p class="warn">Proposé par l’IA d’après la photo ('+esc(L.confidence||'confiance non précisée')+'). Vérifiez le nom, le format et le rayon avant d’enregistrer.</p></div>';
   if(L.state==='found')return '<p class="ok" id="lk">Nom trouvé automatiquement ('+esc(L.source)+'). Vérifiez-le avant d’enregistrer.</p>';
   if(L.state==='offline')return '<p class="info" id="lk">Hors ligne : saisissez le nom. Il sera reconnu aux prochains scans.</p>';
-  return '<p class="info" id="lk">Nom introuvable dans les bases publiques. Saisissez-le une fois : il sera reconnu aux prochains scans.</p>';
+  var srcs=(L.tried&&L.tried.length?' ('+esc(L.tried.join(', '))+')':'');
+  if(S.ai.photo)return '<div id="lk"><p class="info">Nom introuvable'+srcs+'. Photographiez l’emballage pour le remplir automatiquement, ou saisissez le nom : il sera reconnu aux prochains scans.</p>'
+    +'<div style="margin-top:10px"><button class="btn ghost" data-act="pphoto">Photographier l’emballage</button></div></div>';
+  return '<p class="info" id="lk">Nom introuvable'+srcs+'. Saisissez-le une fois : il sera reconnu aux prochains scans.</p>';
 }
+
+/* Photo de l'emballage lue par l'IA (via la fonction Supabase) */
+function packPhoto(file){
+  var code=S.ean;
+  toast('Lecture de l’emballage…');
+  loadImg(file).then(function(img){
+    var k=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight));
+    var c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    return c.toDataURL('image/jpeg',0.8).split(',')[1];
+  }).then(function(b64){
+    return callIdentify({action:'photo',image:b64});
+  }).then(function(r){
+    if(S.view!=='new'||S.ean!==code)return;
+    if(!r.ok){
+      toast(r.status===404?'Lecture par IA pas encore installée sur le serveur.':r.status===401?'Reconnectez-vous puis réessayez.':'Lecture impossible : vérifiez le réseau et réessayez.');return;
+    }
+    var d=r.data;
+    if(!d.found){
+      toast(d.reason==='non_configure'?'Lecture par IA pas encore activée (clé manquante).':d.reason==='photo_trop_lourde'?'Photo trop lourde. Reprenez-la un peu plus loin.':'Texte illisible. Reprenez la photo, bien nette et de face.');return;
+    }
+    var full=withBrand(d.name,d.brand);
+    S.lookup[code]={state:'found',ai:true,name:full,brand:d.brand||'',rayon:d.rayon||'Autre',confidence:d.confidence,source:d.source};
+    var n=document.getElementById('n-name');if(n)n.value=full;
+    var br=document.getElementById('n-brand');if(br)br.value=d.brand||'';
+    var ry=document.getElementById('n-rayon');if(ry&&d.rayon){ry.value=d.rayon;S.rayonTouched=true;}
+    var box=document.getElementById('lk');if(box)box.outerHTML=lookupBox(code);
+    toast('Proposition prête : vérifiez avant d’enregistrer.');
+  }).catch(function(){toast('Photo illisible. Réessayez.');});
+}
+document.getElementById('pphoto').addEventListener('change',function(e){
+  var f=e.target.files&&e.target.files[0];e.target.value='';if(f)packPhoto(f);
+});
 
 /* ================= icônes ================= */
 var I={
@@ -420,6 +517,73 @@ function deltaTxt(cur,prev,field){
   return '<span class="'+(d>0?'up':'down')+'">'+(d>0?'+':'−')+dh(Math.abs(d))+pc+'</span>';
 }
 
+/* ---- Carnet de prix du marché ---- */
+var MK_DAYS=90;
+function marketOf(ean){return S.market.filter(function(m){return m.ean===ean;}).sort(function(a,b){return b.recorded_at.localeCompare(a.recorded_at);});}
+function marketStats(ean){
+  var limit=Date.now()-MK_DAYS*864e5,seen={},list=[];
+  marketOf(ean).forEach(function(m){
+    var k=String(m.source).toLowerCase().replace(/\s+/g,' ').trim();
+    if(seen[k]||new Date(m.recorded_at).getTime()<limit)return;
+    seen[k]=1;list.push(m);
+  });
+  var out={list:list,n:list.length};
+  if(list.length>=2){
+    var sum=0,min=list[0],max=list[0];
+    list.forEach(function(m){sum+=m.price;if(m.price<min.price)min=m;if(m.price>max.price)max=m;});
+    out.avg=Math.round(sum/list.length*100)/100;out.min=min;out.max=max;
+  }
+  return out;
+}
+function gapTxt(mine,ref,label){
+  var d=mine-ref;if(Math.abs(d)<0.005)return '<div>'+label+' : même prix que vous</div>';
+  var pc=ref>0?' ('+(d>0?'+':'−')+Math.abs(Math.round(d/ref*1000)/10).toLocaleString('fr-FR')+' %)':'';
+  return '<div>Votre prix de vente est <span class="'+(d>0?'up':'down')+'">'+(d>0?'+':'−')+dh(Math.abs(d))+pc+'</span> '+(d>0?'au-dessus':'en dessous')+' '+label+'</div>';
+}
+function vMarket(ean){
+  var h='<h2 class="h2">Prix du marché</h2>';
+  if(!S.marketReady)return h+'<p class="info">Le carnet de prix du marché sera disponible après son activation sur le serveur.</p>';
+  var st=marketStats(ean),all=marketOf(ean),sale=lastOf(ean,'sale_price').cur;
+  h+='<p class="lead">Prix relevés chez vos fournisseurs et chez les concurrents. La moyenne compte le dernier prix de chaque source, sur les '+MK_DAYS+' derniers jours.</p><div class="card">';
+  if(st.avg!=null){
+    h+='<p class="plabel">Prix moyen du marché</p><p class="price" style="font-size:36px">'+fmt(st.avg)+'<span>DH</span></p>'
+      +'<p class="sub">'+st.n+' sources. Le plus bas : <b>'+dh(st.min.price)+'</b> ('+esc(st.min.source)+'). Le plus haut : <b>'+dh(st.max.price)+'</b> ('+esc(st.max.source)+').</p>';
+    if(sale)h+='<div class="cmp">'+gapTxt(sale.sale_price,st.avg,'de la moyenne')+gapTxt(sale.sale_price,st.min.price,'du prix le plus bas')+'</div>';
+  } else if(st.n===1){
+    h+='<p class="plabel">Pas encore de moyenne</p><p class="sub">Une seule source récente ('+esc(st.list[0].source)+', '+dh(st.list[0].price)+'). Ajoutez au moins une 2e source pour calculer la moyenne.</p>';
+  } else {
+    h+='<p class="plabel">Pas encore de moyenne</p><p class="sub">'+(all.length?'Les relevés ont plus de '+MK_DAYS+' jours.':'Aucun prix du marché enregistré.')+' Ajoutez au moins 2 sources pour calculer la moyenne.</p>';
+  }
+  if(all.length){
+    h+='<ol class="hist" style="margin-top:14px">';
+    all.forEach(function(x){
+      h+='<li><div><b class="v">'+dh(x.price)+'</b><div class="small">'+esc(x.source)+(x.note?', '+esc(x.note):'')+'</div>'
+        +(x.pending?'<span class="tag warn" style="display:inline-block;margin-top:5px">En attente d’envoi</span>':'')
+        +'</div><time datetime="'+esc(x.recorded_at)+'">'+dateFr(x.recorded_at)+'</time></li>';
+    });
+    h+='</ol>';
+  }
+  if(S.mktOpen){
+    var srcs={};S.market.forEach(function(m){srcs[m.source]=1;});
+    h+='<div class="field"><label for="mk-source">Source (fournisseur ou concurrent)</label><input id="mk-source" list="mk-list" autocomplete="off" placeholder="Ex : Grossiste Atlas, Marjane">'
+      +'<datalist id="mk-list">'+Object.keys(srcs).map(function(x){return '<option value="'+esc(x)+'">';}).join('')+'</datalist></div>'
+      +'<div class="two"><div class="field"><label for="mk-price">Prix (DH)</label><input id="mk-price" inputmode="decimal" placeholder="0,00"></div>'
+      +'<div class="field"><label for="mk-note">Note <span class="opt">facultatif</span></label><input id="mk-note" placeholder="Format, promo…"></div></div>'
+      +'<div class="two" style="margin-top:14px"><button class="btn ghost" data-act="cancelmkt">Annuler</button><button class="btn" data-act="savemkt">Enregistrer</button></div>';
+  } else h+='<div style="margin-top:14px"><button class="btn ghost" data-act="openmkt">Ajouter un prix du marché</button></div>';
+  return h+'</div>';
+}
+function saveMarket(){
+  var source=val('mk-source').replace(/\s+/g,' ').trim(),price=num(val('mk-price'));
+  if(!source){toast('Indiquez la source du prix.');return;}
+  if(price==null||isNaN(price)||price<=0){toast('Indiquez un prix supérieur à 0.');return;}
+  var row={client_id:uuid(),ean:S.ean,source:source,price:price,note:val('mk-note').trim()||null,recorded_at:nowIso()};
+  S.market.push(Object.assign({pending:true},row,{note:row.note||''}));
+  queue({type:'market',row:row});
+  S.mktOpen=false;S.reset=true;render();
+  toast('Prix du marché enregistré.');
+}
+
 function vProduct(){
   var ean=S.ean,p=S.products[ean];
   if(!p)return '<div class="wrap"><button class="back" data-act="tab" data-v="scan">‹ Scanner</button><p class="info">Produit introuvable.</p></div>';
@@ -458,6 +622,8 @@ function vProduct(){
       +'<div class="two" style="margin-top:14px"><button class="btn ghost" data-act="cancelform">Annuler</button><button class="btn" id="np-save" data-act="saveprice" disabled>Enregistrer</button></div>';
   } else h+='<div style="margin-top:16px"><button class="btn" data-act="openform">Comparer un nouveau prix</button></div>';
   h+='</div>';
+
+  h+=vMarket(ean);
 
   h+='<h2 class="h2">Historique des prix</h2><p class="lead">Chaque prix est conservé pour toujours. Pour corriger une erreur, saisissez un nouveau prix avec une note.</p>';
   if(!hist.length)h+='<p class="info">Aucun prix enregistré.</p>';
@@ -543,8 +709,10 @@ function vSettings(){
   if(S.sync.state==='error'&&S.sync.msg)h+='<p class="err">'+esc(S.sync.msg)+'</p>';
   h+='<div style="margin-top:14px"><button class="btn ghost" data-act="syncnow">Synchroniser maintenant</button></div></div>';
   h+='<div class="card" style="margin-top:14px"><p class="plabel">Compte</p><p style="margin:6px 0 0">'+esc(S.email||'Gérant')+'</p>'
-    +'<p class="sub">'+Object.keys(S.products).length+' produits, '+S.prices.length+' relevés de prix.</p>'
+    +'<p class="sub">'+Object.keys(S.products).length+' produits, '+S.prices.length+' relevés de prix, '+S.market.length+' prix du marché.</p>'
     +'<div style="margin-top:14px"><button class="btn danger" data-act="logout">Se déconnecter</button></div></div>';
+  h+='<div class="card" style="margin-top:14px"><p class="plabel">Options</p>'
+    +'<p class="sub">Carnet de prix du marché : '+(S.marketReady?'activé':'pas encore activé')+'.<br>Lecture de l’emballage par IA : '+(S.ai.photo?'activée':'non activée')+'.<br>Base complémentaire Go-UPC : '+(S.ai.lookup?'activée':'non activée')+'.</p></div>';
   h+='<div class="card" style="margin-top:14px"><p class="plabel">Installer l’appli</p>'
     +'<p class="sub">iPhone : dans Safari, bouton Partager puis « Sur l’écran d’accueil ».<br>Android : dans Chrome, menu ⋮ puis « Installer l’application ».</p></div>';
   h+='<p class="foot">Market Babylon '+VERSION+'. Les prix sont stockés en ligne et conservés pour toujours, même si le téléphone change.</p></div>';
@@ -590,7 +758,7 @@ function go(view,ean,from){
   S.view=view;if(ean!==undefined)S.ean=ean;
   if(view==='scan'||view==='list'||view==='settings')S.from=view;
   if(from)S.from=from;
-  S.formOpen=false;S.editOpen=false;S.reset=true;S.rayonTouched=false;
+  S.formOpen=false;S.editOpen=false;S.mktOpen=false;S.reset=true;S.rayonTouched=false;
   if(view!=='scan')S.msg='';
   render();
   document.getElementById('main').scrollTop=0;
@@ -673,6 +841,7 @@ document.addEventListener('click',function(e){
   else if(a==='cam')startCamera();
   else if(a==='camstop')stopCamera();
   else if(a==='photo')document.getElementById('photo').click();
+  else if(a==='pphoto')document.getElementById('pphoto').click();
   else if(a==='find')handleCode(val('code'));
   else if(a==='open')go('product',b.dataset.ean,b.dataset.from||'scan');
   else if(a==='rayon'){S.rayon=b.dataset.v;render();}
@@ -683,6 +852,9 @@ document.addEventListener('click',function(e){
   else if(a==='saveedit')saveEdit();
   else if(a==='create')create();
   else if(a==='saveprice')savePrice();
+  else if(a==='openmkt'){S.mktOpen=true;render();var el=document.getElementById('mk-source');if(el)el.focus();}
+  else if(a==='cancelmkt'){S.mktOpen=false;S.reset=true;render();}
+  else if(a==='savemkt')saveMarket();
   else if(a==='savecfg')saveCfg();
   else if(a==='resetcfg'){if(confirm('Effacer la configuration de ce téléphone ?')){localStorage.removeItem(K.cfg);S.screen='setup';S.reset=true;render();}}
   else if(a==='login')login();

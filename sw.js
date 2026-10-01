@@ -1,5 +1,5 @@
 /* Market Babylon : fonctionnement hors ligne */
-var VERSION = 'mb-1.0.1';
+var VERSION = 'mb-1.2.0';
 var SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
