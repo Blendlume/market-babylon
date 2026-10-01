@@ -131,7 +131,7 @@ nav.tabs[hidden]{display:none}
 #cam:not([hidden]){display:flex}
 #cam video{flex:1;width:100%;min-height:0;object-fit:cover}
 .frame{position:absolute;left:11%;right:11%;top:36%;height:22%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
-.camtxt{position:absolute;left:0;right:0;top:calc(36% - 44px);text-align:center;color:#fff;font-weight:700}
+.camtxt{position:absolute;left:0;right:0;top:calc(36% - 62px);text-align:center;color:#fff;font-weight:700;line-height:1.3}
 .cambar{flex:none;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));background:#000}
 
 #toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:60;max-width:520px;margin:0 auto;padding:12px 14px;border-radius:12px;background:var(--ink);color:var(--bg);font-weight:600;font-size:14.5px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
@@ -162,7 +162,7 @@ nav.tabs[hidden]{display:none}
 
 <div id="cam" hidden>
   <video id="camv" playsinline muted></video>
-  <div class="camtxt">Placez le code-barre dans le cadre</div>
+  <div class="camtxt">Code-barre bien à plat, au centre, à 15 à 20 cm<br><span style="font-weight:500;font-size:13px;opacity:.85">Il s’ouvre tout seul dès qu’il est lu</span></div>
   <div class="frame"></div>
   <div class="cambar"><button class="btn ghost" data-act="camstop" style="color:#fff;border-color:#555">Annuler</button></div>
 </div>
@@ -172,7 +172,7 @@ nav.tabs[hidden]{display:none}
 <script>
 (function(){
 'use strict';
-var VERSION='1.0.0';
+var VERSION='1.0.1';
 var RAYONS=['Alimentation','Parfumerie','Cosmétique','Droguerie','Autre'];
 var K={cfg:'mb-config',data:'mb-data',out:'mb-outbox',pull:'mb-lastpull'};
 
@@ -729,6 +729,7 @@ function beep(){
 }
 function stopCamera(){
   camOn=false;
+  clearInterval(scanLoop);scanLoop=null;scanBusy=false;
   if(reader){try{reader.reset();}catch(e){}reader=null;}
   clearInterval(nTimer);nTimer=null;
   if(nStream){nStream.getTracks().forEach(function(t){t.stop();});nStream=null;}
@@ -741,12 +742,58 @@ function camFail(e){
   if(e&&e.name==='NotAllowedError')toast('Caméra refusée. Autorisez l’appareil photo pour ce site (Réglages > Safari > Appareil photo), ou utilisez « Photo du code-barre ».');
   else toast('Caméra inaccessible. Utilisez « Photo du code-barre » ou la douchette.');
 }
-var CONSTRAINTS={audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}};
+var CONSTRAINTS={audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}};
+var scanLoop=null,scanBusy=false,scanTick=0,mzReader=null,scanCanvas=null;
+function modernOK(z){return !!(z&&z.MultiFormatReader&&z.HTMLCanvasElementLuminanceSource&&z.BinaryBitmap&&z.HybridBinarizer);}
+function tuneTrack(stream){
+  try{
+    var t=stream.getVideoTracks()[0];if(!t||!t.getCapabilities)return;
+    var cap=t.getCapabilities(),adv={};
+    if(cap.focusMode&&cap.focusMode.indexOf('continuous')>=0)adv.focusMode='continuous';
+    if(Object.keys(adv).length)t.applyConstraints({advanced:[adv]}).catch(function(){});
+  }catch(e){}
+}
+/* Zones lues à tour de rôle : bande large, zone agrandie au centre, image tournée */
+var SCAN_MODES=[
+  {wf:1,hf:.5},{wf:.6,hf:.3},{wf:1,hf:1,rot:true},{wf:1,hf:1},{wf:.6,hf:.3,rot:true},{wf:.8,hf:.4}
+];
+function scanFrame(){
+  var v=document.getElementById('camv');
+  if(!camOn||scanBusy||!v||v.readyState<2||!v.videoWidth)return;
+  scanBusy=true;
+  try{
+    var z=Z(),vw=v.videoWidth,vh=v.videoHeight;
+    var m=SCAN_MODES[scanTick%SCAN_MODES.length];scanTick++;
+    var sw=Math.round(vw*m.wf),sh=Math.round(vh*m.hf),sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
+    var k=Math.min(1,1100/Math.max(sw,sh)),cw=Math.round(sw*k),ch=Math.round(sh*k);
+    var c=scanCanvas,ctx=c.getContext('2d',{willReadFrequently:true});
+    if(m.rot){c.width=ch;c.height=cw;ctx.translate(ch/2,cw/2);ctx.rotate(Math.PI/2);ctx.drawImage(v,sx,sy,sw,sh,-cw/2,-ch/2,cw,ch);}
+    else{c.width=cw;c.height=ch;ctx.drawImage(v,sx,sy,sw,sh,0,0,cw,ch);}
+    var bmp=new z.BinaryBitmap(new z.HybridBinarizer(new z.HTMLCanvasElementLuminanceSource(c)));
+    var res=mzReader.decode(bmp);
+    if(res&&camOn){scanBusy=false;onCode(res.getText());return;}
+  }catch(e){/* aucun code dans cette image : normal, on réessaie */}
+  scanBusy=false;
+}
 function startCamera(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camFail();return;}
   var z=Z();
   if(!z){if('BarcodeDetector' in window){startNative();return;}
     toast('Module de scan indisponible (connexion nécessaire au premier lancement). Utilisez la saisie ou la douchette.');return;}
+  if(!modernOK(z)){startLegacy(z);return;}
+  navigator.mediaDevices.getUserMedia(CONSTRAINTS).then(function(stream){
+    nStream=stream;camOn=true;
+    var v=document.getElementById('camv');
+    v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;
+    document.getElementById('cam').hidden=false;
+    v.play().catch(function(){});
+    tuneTrack(stream);
+    mzReader=new z.MultiFormatReader();mzReader.setHints(hints());
+    scanCanvas=document.createElement('canvas');scanTick=0;scanBusy=false;
+    scanLoop=setInterval(scanFrame,130);
+  }).catch(camFail);
+}
+function startLegacy(z){
   var v=document.getElementById('camv');
   document.getElementById('cam').hidden=false;camOn=true;
   try{
