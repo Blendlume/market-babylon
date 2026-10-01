@@ -350,6 +350,14 @@ main{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
 .banner.trash{background:color-mix(in srgb,var(--up) 13%,transparent);color:var(--up)}
 .banner .bb{display:flex;gap:8px;flex:none}
 @media (max-width:420px){.banner.trash{flex-direction:column;align-items:stretch}.banner.trash .bb{display:grid;grid-template-columns:1fr 1fr}}
+
+/* ===== 2.0.4 : plein écran sur iPhone (app installée) : plus de vide sous le menu ===== */
+:root{padding-top:0;padding-bottom:0}
+html,body{height:100%;margin:0}
+#app{position:fixed;top:0;right:0;bottom:0;left:0;height:auto;background:var(--bg)}
+.top{padding-top:calc(11px + env(safe-area-inset-top,0px))}
+nav.tabs{padding-bottom:max(8px,calc(env(safe-area-inset-bottom,0px) - 8px))}
+@media (min-width:900px){nav.tabs{padding-bottom:26px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -380,7 +388,7 @@ main{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
 <script>
 (function(){
 'use strict';
-var VERSION='2.0.3';
+var VERSION='2.0.5';
 var TRASH_DAYS=30;
 var RAYONS=['Alimentation','Boissons','Frais et surgelés','Ménage et entretien','Hygiène et cosmétique','Parfumerie','Tabac, snus et vape','Accessoires téléphone','Électronique et câbles','Quincaillerie','Vêtements','Papeterie et jouets','Autre'];
 /* Rayons : la liste de base + tous les rayons déjà utilisés par un produit (y compris ceux créés par le gérant) */
@@ -783,6 +791,8 @@ var I={
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>',
   info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
   out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
+  arch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10h14V9M10 13h4"/></svg>',
   pic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/></svg>',
   bars:'<svg viewBox="0 0 120 52" aria-hidden="true"><g fill="currentColor"><rect x="0" width="4" height="52"/><rect x="7" width="2" height="52"/><rect x="12" width="6" height="52"/><rect x="21" width="2" height="52"/><rect x="26" width="4" height="52"/><rect x="33" width="2" height="52"/><rect x="38" width="2" height="52"/><rect x="43" width="6" height="52"/><rect x="52" width="2" height="52"/><rect x="57" width="4" height="52"/><rect x="64" width="2" height="52"/><rect x="69" width="6" height="52"/><rect x="78" width="2" height="52"/><rect x="83" width="4" height="52"/><rect x="90" width="2" height="52"/><rect x="95" width="6" height="52"/><rect x="104" width="2" height="52"/><rect x="109" width="4" height="52"/><rect x="116" width="4" height="52"/></g></svg>'
 };
@@ -1142,10 +1152,10 @@ function vList(){
   h+='<button class="rbtn'+(S.rayon!=='Tous'?' on':'')+'" data-act="rayonsheet" aria-haspopup="dialog"><span>'+(S.rayon==='Tous'?'Rayon':esc(S.rayon))+'</span>'
     +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></div>';
   h+='<div style="margin-top:16px">';
-  if(!all.length)h+='<p class="info">Aucun produit enregistré. Scannez un premier produit pour commencer.</p>';
-  else if(!items.length)h+='<p class="info">Aucun produit ne correspond à cette recherche.</p>';
+  if(!all.length&&S.rayon!=='Corbeille'&&S.rayon!=='Archivés')h+='<p class="info">Aucun produit enregistré. Scannez un premier produit pour commencer.</p>';
+  else if(!items.length)h+='<p class="info">'+(S.rayon==='Corbeille'?'La corbeille est vide. Un produit supprimé y reste '+TRASH_DAYS+' jours avant d’être effacé.':S.rayon==='Archivés'?'Aucun produit archivé.':'Aucun produit ne correspond à cette recherche.')+'</p>';
   else{
-    h+='<p class="small" style="margin:0 0 10px">'+items.length+' produit'+(items.length>1?'s':'')+(S.rayon!=='Tous'?' dans « '+esc(S.rayon)+' »':'')+'</p><div class="list cols">';
+    h+='<p class="small" style="margin:0 0 10px">'+items.length+' produit'+(items.length>1?'s':'')+(S.rayon==='Corbeille'||S.rayon==='Archivés'?' : '+esc(S.rayon).toLowerCase():(S.rayon!=='Tous'?' dans « '+esc(S.rayon)+' »':''))+'</p><div class="list cols">';
     items.forEach(function(p){h+=itemRow(p,'list');});
     h+='</div>';
   }
@@ -1159,8 +1169,7 @@ function openRayonSheet(){
   function opt(r,count,cls){return '<button class="ropt'+(cls?' '+cls:'')+(S.rayon===r?' sel':'')+'" data-act="pickrayon" data-v="'+esc(r)+'"><span class="nm">'+esc(r)+'</span><span class="ct">'+count+'</span></button>';}
   var h=opt('Tous',cn.total);
   used.forEach(function(r){h+=opt(r,cn.by[r]);});
-  if(cn.archived)h+=opt('Archivés',cn.archived);
-  if(cn.trash)h+=opt('Corbeille',cn.trash);
+
   if(empty.length){h+='<p class="rsep">Rayons sans produit</p>';empty.forEach(function(r){h+=opt(r,0,'empty');});}
   document.getElementById('sheetlist').innerHTML=h;
   var sh=document.getElementById('sheet');sh.hidden=false;
@@ -1193,6 +1202,9 @@ function vSettings(){
     +row('find','Bases complémentaires','UPCitemdb'+(S.ai.eansearch?', EAN-Search':'')+(S.ai.goupc?', Go-UPC':''),S.ai.lookup?'Activées':'Non activées',S.ai.lookup)
     +row('spark','Lecture de l’emballage par IA',null,S.ai.photo?'Activée':'Non activée',S.ai.photo));
   h+=group('Prix',row('tagi','Carnet de prix du marché','Moyenne calculée dès 2 sources récentes',S.marketReady?'Activé':'Non activé',S.marketReady));
+  var cn2=rayonCounts();
+  h+=group('Corbeille et archives',row('trash','Corbeille','Produits supprimés, effacés après '+TRASH_DAYS+' jours',cn2.trash+' produit'+(cn2.trash>1?'s':''),false,'opentrash')
+    +row('arch','Archivés','Retirés des listes, historique conservé',cn2.archived+' produit'+(cn2.archived>1?'s':''),false,'openarch'));
   h+=group('Application',row('home','Installer sur l’écran d’accueil','iPhone : Safari, Partager, puis « Sur l’écran d’accueil ». Android : Chrome, menu, puis « Installer l’application ».',null)
     +row('info','Version',null,'Babylon Market '+VERSION));
   h+=group('Session',row('out','Se déconnecter',null,null,false,'logout','danger'));
@@ -1333,6 +1345,8 @@ document.addEventListener('click',function(e){
   else if(a==='pphoto')document.getElementById('pphoto').click();
   else if(a==='find')handleCode(val('code'));
   else if(a==='open')go('product',b.dataset.ean,b.dataset.from||'scan');
+  else if(a==='opentrash'){S.rayon='Corbeille';S.q='';go('list');}
+  else if(a==='openarch'){S.rayon='Archivés';S.q='';go('list');}
   else if(a==='rayonsheet')openRayonSheet();
   else if(a==='closesheet')closeSheet();
   else if(a==='pickrayon'){S.rayon=b.dataset.v;closeSheet();S.reset=false;render();document.getElementById('main').scrollTop=0;}
