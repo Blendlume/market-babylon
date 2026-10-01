@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Market Babylon</title>
+<meta name="theme-color" content="#1D3C8F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Babylon">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --lapis:#1D3C8F; --lapis-2:#16306F; --gold:#E3A72F; --glaze:#1C8577; --brick:#B3432B;
+  --bg:#F1F3F8; --surface:#FFFFFF; --ink:#1B2335; --muted:#5A6378; --line:#DDE2EC; --chip:#E7ECF7;
+  --warn-bg:#FCEBCF; --warn-ink:#7A4B00; --accent:#1D3C8F;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E1426; --surface:#172039; --ink:#E7EBF4; --muted:#9BA5BE; --line:#2A3655; --chip:#223055;
+    --glaze:#46B8A8; --brick:#E47A63; --warn-bg:#3A2E14; --warn-ink:#F2C874; --accent:#8FAAF2;
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;background:linear-gradient(var(--lapis-2) 50%,var(--surface) 50%)}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+#app{display:flex;flex-direction:column;height:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+.top{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px 11px 16px;color:#fff;
+  background-color:var(--lapis);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='20'%3E%3Cpath d='M0 .5H40M0 10.5H40M.5 0V10M20.5 10V20' stroke='%23fff' stroke-opacity='.13' fill='none'/%3E%3C/svg%3E");
+  border-bottom:3px solid var(--gold)}
+.brand{font-weight:800;font-size:19px;line-height:1.1;flex:1;min-width:0}
+.pill{display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.28);background:rgba(0,0,0,.18);color:#fff;border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;background:#5BD3A0;display:block}
+.pill.pending i{background:var(--gold)}.pill.offline i{background:#9AA3B5}.pill.error i{background:#FF7A62}
+.pill.sync i{background:#fff;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.wrap{max-width:620px;margin:0 auto;padding:18px 16px 36px}
+.h1{font-size:25px;font-weight:800;line-height:1.15;margin:4px 0 16px}
+.h2{font-size:17px;font-weight:800;margin:28px 0 4px}
+.lead{color:var(--muted);font-size:14px;margin:0 0 12px}
+.small{font-size:13px;color:var(--muted)}
+.hint{font-size:13.5px;color:var(--muted);margin:8px 0 0}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:50px;padding:12px 16px;border:0;border-radius:12px;background:var(--lapis);color:#fff;font-weight:700;font-size:16px}
+.btn svg{width:22px;height:22px;flex:none}
+.btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--line)}
+.btn.danger{background:transparent;color:var(--brick);border:1.5px solid var(--line)}
+.btn.sm{min-height:40px;padding:8px 12px;font-size:14px;width:auto;border-radius:10px}
+.btn.sq{width:auto;padding:0 18px}
+.back{background:none;border:0;padding:6px 0;color:var(--accent);font-weight:700;font-size:15px}
+.link{background:none;border:0;padding:0;color:var(--accent);font-weight:700;font-size:14px;text-decoration:underline}
+
+.field{margin-top:16px}
+.field label{display:block;font-weight:700;font-size:14px;margin-bottom:6px}
+.field label .opt{font-weight:500;color:var(--muted)}
+input,select,textarea{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+textarea{min-height:70px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--lapis);outline:none;box-shadow:0 0 0 3px rgba(227,167,47,.45)}
+.row{display:flex;gap:8px}
+.code{font-size:21px;letter-spacing:1.5px;font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two>*{min-width:0}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.err{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:rgba(179,67,43,.12);color:var(--brick);font-weight:600;font-size:14.5px}
+.warn{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--warn-bg);color:var(--warn-ink);font-size:14.5px}
+.ok{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:rgba(28,133,119,.13);color:var(--glaze);font-weight:600;font-size:14.5px}
+.info{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--chip);font-size:14px;color:var(--ink)}
+
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.item{display:flex;align-items:center;gap:12px;padding:13px 14px;border:0;border-top:1px solid var(--line);background:none;text-align:left;width:100%}
+.item:first-child{border-top:0}
+.item .grow{flex:1;min-width:0}
+.item .grow>span{display:block}
+.item .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .pr{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--lapis);border-color:var(--lapis);color:#fff}
+
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:2px}
+.tag{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--chip);color:var(--ink)}
+.tag.warn{background:var(--warn-bg);color:var(--warn-ink)}
+
+.pcard{margin-top:16px;border-top:4px solid var(--gold);border-radius:16px}
+.plabel{font-size:14px;font-weight:700;color:var(--muted);margin:0}
+.price{font-size:44px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;margin:6px 0 4px}
+.price span{font-size:19px;font-weight:700;color:var(--muted);margin-left:5px}
+.buy{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.buy strong{font-size:22px;font-variant-numeric:tabular-nums}
+.sub{margin:4px 0 0;font-size:14px;color:var(--muted)}
+.up{color:var(--brick);font-weight:700}.down{color:var(--glaze);font-weight:700}
+
+.cmp{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.cmp div{padding:9px 11px;border-radius:10px;background:var(--chip);font-size:14.5px}
+.cmp b{font-variant-numeric:tabular-nums}
+
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.hist li:first-child{border-top:0;padding-top:2px}
+.hist .v{font-variant-numeric:tabular-nums}
+.hist time{font-size:13px;color:var(--muted);white-space:nowrap;text-align:right}
+
+.foot{margin-top:30px;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:14px}
+.center{max-width:440px;margin:0 auto;padding:36px 18px}
+
+nav.tabs{flex:none;display:flex;background:var(--surface);border-top:1px solid var(--line)}
+nav.tabs button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 10px;border:0;background:none;color:var(--muted);font-size:12.5px;font-weight:700}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+nav.tabs[hidden]{display:none}
+
+#cam{position:fixed;inset:0;z-index:50;background:#000;flex-direction:column}
+#cam:not([hidden]){display:flex}
+#cam video{flex:1;width:100%;min-height:0;object-fit:cover}
+.frame{position:absolute;left:11%;right:11%;top:36%;height:22%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
+.camtxt{position:absolute;left:0;right:0;top:calc(36% - 44px);text-align:center;color:#fff;font-weight:700}
+.cambar{flex:none;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));background:#000}
+
+#toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:60;max-width:520px;margin:0 auto;padding:12px 14px;border-radius:12px;background:var(--ink);color:var(--bg);font-weight:600;font-size:14.5px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+#toast[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){.pill.sync i{animation:none}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+      <g fill="#E3A72F">
+        <ellipse cx="16" cy="7.5" rx="3" ry="6"/><ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(45 16 16)"/>
+        <ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(90 16 16)"/><ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(135 16 16)"/>
+        <ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(180 16 16)"/><ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(225 16 16)"/>
+        <ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(270 16 16)"/><ellipse cx="16" cy="7.5" rx="3" ry="6" transform="rotate(315 16 16)"/>
+      </g>
+      <circle cx="16" cy="16" r="3.6" fill="#1D3C8F" stroke="#E3A72F" stroke-width="1.6"/>
+    </svg>
+    <div class="brand">Market Babylon</div>
+    <button class="pill" id="pill" data-act="tab" data-v="settings" hidden></button>
+  </header>
+  <main id="main"><div id="view"></div></main>
+  <nav class="tabs" id="tabs" aria-label="Navigation" hidden></nav>
+</div>
+
+<div id="cam" hidden>
+  <video id="camv" playsinline muted></video>
+  <div class="camtxt">Placez le code-barre dans le cadre</div>
+  <div class="frame"></div>
+  <div class="cambar"><button class="btn ghost" data-act="camstop" style="color:#fff;border-color:#555">Annuler</button></div>
+</div>
+<input type="file" id="photo" accept="image/*" hidden>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+'use strict';
+var VERSION='1.0.0';
+var RAYONS=['Alimentation','Parfumerie','Cosmétique','Droguerie','Autre'];
+var K={cfg:'mb-config',data:'mb-data',out:'mb-outbox',pull:'mb-lastpull'};
+
+var S={screen:'boot',view:'scan',from:'scan',ean:null,products:{},prices:[],outbox:[],
+  sync:{state:'idle',msg:''},rayon:'Tous',q:'',msg:'',formOpen:false,editOpen:false,reset:true,
+  lookup:{},email:'',busy:false};
+var sb=null;
+var $view=document.getElementById('view');
+
+/* ================= utilitaires ================= */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmt(n){return Number(n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function dh(n){return fmt(n)+' DH';}
+function num(s){s=String(s==null?'':s).replace(/\s/g,'').replace(',','.');if(s==='')return null;var v=Number(s);return isFinite(v)?Math.round(v*100)/100:NaN;}
+function toNum(v){return v==null?null:Number(v);}
+function dateFr(iso){return new Date(iso).toLocaleString('fr-FR',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+function dayFr(iso){return new Date(iso).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
+function nowIso(){return new Date().toISOString();}
+function uuid(){
+  if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+  var b=new Uint8Array(16);crypto.getRandomValues(b);b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;
+  var h=Array.prototype.map.call(b,function(x){return ('0'+x.toString(16)).slice(-2);}).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+}
+function val(id){var el=document.getElementById(id);return el?el.value:'';}
+function getJ(k){try{var r=localStorage.getItem(k);return r?JSON.parse(r):null;}catch(e){return null;}}
+function setJ(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}}
+function validEan(c){
+  if(!/^\d+$/.test(c)||[8,12,13,14].indexOf(c.length)<0)return false;
+  var d=c.split('').map(Number),chk=d.pop(),s=0;
+  d.reverse().forEach(function(x,i){s+=x*(i%2===0?3:1);});
+  return (10-s%10)%10===chk;
+}
+var tT;
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(tT);tT=setTimeout(function(){t.hidden=true;},3800);}
+
+/* ================= données locales ================= */
+function loadLocal(){
+  var d=getJ(K.data)||{};S.products=d.products||{};S.prices=d.prices||[];
+  S.outbox=getJ(K.out)||[];
+}
+function saveLocal(){
+  var ok=setJ(K.data,{products:S.products,prices:S.prices});
+  setJ(K.out,S.outbox);
+  if(!ok)toast('Mémoire du téléphone pleine : libérez de l’espace.');
+}
+function pricesOf(ean){return S.prices.filter(function(p){return p.ean===ean;}).sort(function(a,b){return b.recorded_at.localeCompare(a.recorded_at);});}
+function lastOf(ean,field){
+  var list=pricesOf(ean).filter(function(p){return p[field]!=null;});
+  return {cur:list[0]||null,prev:list[1]||null};
+}
+function lastActivity(ean){var h=pricesOf(ean)[0];return h?h.recorded_at:(S.products[ean].created_at||'');}
+function pendingCount(){return S.outbox.length;}
+
+/* ================= synchronisation ================= */
+function setSync(state,msg){S.sync={state:state,msg:msg||''};renderPill();if(S.view==='settings')render();}
+function chk(res){if(res&&res.error)throw res.error;return res;}
+var syncing=false,again=false;
+function sync(){
+  if(!sb||S.screen!=='app')return;
+  if(syncing){again=true;return;}
+  if(!navigator.onLine){setSync('offline');return;}
+  syncing=true;setSync('sync');
+  flush().then(pull).then(function(){setSync(S.outbox.length?'pending':'ok');})
+  .catch(function(e){setSync(navigator.onLine?'error':'offline',e&&e.message?e.message:String(e));})
+  .then(function(){syncing=false;if(again){again=false;sync();}});
+}
+function flush(){
+  var ops=S.outbox.slice();
+  if(!ops.length)return Promise.resolve();
+  var prods=ops.filter(function(o){return o.type==='product';}).map(function(o){return o.row;});
+  var ups=ops.filter(function(o){return o.type==='product_update';});
+  var prs=ops.filter(function(o){return o.type==='price';}).map(function(o){return o.row;});
+  var p=Promise.resolve();
+  if(prods.length)p=p.then(function(){return sb.from('products').upsert(prods,{onConflict:'ean',ignoreDuplicates:true}).then(chk);});
+  ups.forEach(function(u){p=p.then(function(){return sb.from('products').update(u.patch).eq('ean',u.ean).then(chk);});});
+  if(prs.length)p=p.then(function(){return sb.from('prices').upsert(prs,{onConflict:'client_id',ignoreDuplicates:true}).then(chk);});
+  return p.then(function(){
+    var done={};ops.forEach(function(o){done[o.id]=1;});
+    S.outbox=S.outbox.filter(function(o){return !done[o.id];});
+    var sent={};prs.forEach(function(r){sent[r.client_id]=1;});
+    S.prices.forEach(function(x){if(sent[x.client_id])delete x.pending;});
+    prods.forEach(function(r){if(S.products[r.ean])delete S.products[r.ean].pending;});
+    saveLocal();
+  });
+}
+function pullTable(table,col,since){
+  var all=[],page=0,size=1000;
+  function next(){
+    var q=sb.from(table).select('*');
+    if(since)q=q.gte(col,since);
+    q=q.order(col,{ascending:true}).range(page*size,page*size+size-1);
+    return q.then(chk).then(function(r){var d=r.data||[];all=all.concat(d);if(d.length===size){page++;return next();}return all;});
+  }
+  return next();
+}
+function pull(){
+  var lp=getJ(K.pull)||{};
+  return pullTable('products','updated_at',lp.products).then(function(rows){
+    rows.forEach(function(r){
+      var loc=S.products[r.ean];
+      var hasPendingEdit=S.outbox.some(function(o){return o.type==='product_update'&&o.ean===r.ean;});
+      if(!hasPendingEdit||!loc)S.products[r.ean]={ean:r.ean,name:r.name,brand:r.brand||'',rayon:r.rayon,source:r.source,created_at:r.created_at,updated_at:r.updated_at};
+    });
+    if(rows.length)lp.products=rows[rows.length-1].updated_at;
+    return pullTable('prices','created_at',lp.prices);
+  }).then(function(rows){
+    var idx={};S.prices.forEach(function(p,i){idx[p.client_id]=i;});
+    rows.forEach(function(r){
+      var x={client_id:r.client_id,ean:r.ean,sale_price:toNum(r.sale_price),purchase_price:toNum(r.purchase_price),note:r.note||'',recorded_at:r.recorded_at};
+      if(idx[r.client_id]!=null)S.prices[idx[r.client_id]]=x;else{idx[r.client_id]=S.prices.length;S.prices.push(x);}
+    });
+    if(rows.length)lp.prices=rows[rows.length-1].created_at;
+    setJ(K.pull,lp);saveLocal();render();
+  });
+}
+function queue(op){op.id=uuid();S.outbox.push(op);saveLocal();sync();}
+
+/* ================= nom automatique (bases publiques) ================= */
+var BASES=[
+  {url:'https://world.openfoodfacts.org',rayon:'Alimentation',nom:'Open Food Facts'},
+  {url:'https://world.openbeautyfacts.org',rayon:'Cosmétique',nom:'Open Beauty Facts'},
+  {url:'https://world.openproductsfacts.org',rayon:'Droguerie',nom:'Open Products Facts'}
+];
+function fetchT(url,ms){
+  return new Promise(function(ok,ko){
+    var done=false,t=setTimeout(function(){if(!done){done=true;ko(new Error('timeout'));}},ms);
+    fetch(url).then(function(r){if(done)return;done=true;clearTimeout(t);ok(r);},function(e){if(done)return;done=true;clearTimeout(t);ko(e);});
+  });
+}
+function lookup(code){
+  if(S.lookup[code]&&S.lookup[code].state!=='offline')return;
+  if(!navigator.onLine){S.lookup[code]={state:'offline'};return;}
+  S.lookup[code]={state:'loading'};
+  var i=0;
+  function tryNext(){
+    if(i>=BASES.length){S.lookup[code]={state:'notfound'};return after();}
+    var b=BASES[i++];
+    return fetchT(b.url+'/api/v2/product/'+code+'.json?fields=product_name,product_name_fr,brands,quantity',6000)
+      .then(function(r){return r.json();})
+      .then(function(j){
+        var p=j&&j.status===1&&j.product;
+        var name=p&&(p.product_name_fr||p.product_name||'').trim();
+        if(name){
+          if(p.quantity&&name.toLowerCase().indexOf(String(p.quantity).toLowerCase())<0)name+=' '+String(p.quantity).trim();
+          S.lookup[code]={state:'found',name:name,brand:(p.brands||'').split(',')[0].trim(),rayon:b.rayon,source:b.nom};
+          return after();
+        }
+        return tryNext();
+      }).catch(function(){return tryNext();});
+  }
+  function after(){
+    if(S.view!=='new'||S.ean!==code)return;
+    var L=S.lookup[code];
+    if(L.state==='found'){
+      var n=document.getElementById('n-name');if(n&&!n.value)n.value=L.name;
+      var br=document.getElementById('n-brand');if(br&&!br.value)br.value=L.brand;
+      var ry=document.getElementById('n-rayon');if(ry&&!S.rayonTouched)ry.value=L.rayon;
+    }
+    var box=document.getElementById('lk');if(box)box.outerHTML=lookupBox(code);
+  }
+  tryNext();
+}
+function lookupBox(code){
+  var L=S.lookup[code]||{state:'loading'};
+  if(L.state==='loading')return '<p class="info" id="lk">Recherche du nom dans les bases publiques…</p>';
+  if(L.state==='found')return '<p class="ok" id="lk">Nom trouvé automatiquement ('+esc(L.source)+'). Vérifiez-le avant d’enregistrer.</p>';
+  if(L.state==='offline')return '<p class="info" id="lk">Hors ligne : saisissez le nom. Il sera reconnu aux prochains scans.</p>';
+  return '<p class="info" id="lk">Nom introuvable dans les bases publiques. Saisissez-le une fois : il sera reconnu aux prochains scans.</p>';
+}
+
+/* ================= icônes ================= */
+var I={
+  scan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'
+};
+
+/* ================= écrans : configuration et connexion ================= */
+function vSetup(){
+  return '<div class="center"><h1 class="h1">Configuration</h1>'
+   +'<p class="lead">Informations fournies par Blendlume, à saisir une seule fois sur ce téléphone.</p>'
+   +'<div class="field"><label for="c-url">Adresse du projet</label><input id="c-url" type="url" autocomplete="off" autocapitalize="off" placeholder="https://xxxx.supabase.co"></div>'
+   +'<div class="field"><label for="c-key">Clé publique</label><input id="c-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>'
+   +(S.msg?'<p class="err" role="alert">'+esc(S.msg)+'</p>':'')
+   +'<div style="margin-top:18px"><button class="btn" data-act="savecfg">Enregistrer</button></div></div>';
+}
+function vLogin(){
+  return '<div class="center"><h1 class="h1">Connexion</h1>'
+   +'<p class="lead">Connexion du gérant. Elle reste active sur ce téléphone.</p>'
+   +'<div class="field"><label for="l-mail">Email</label><input id="l-mail" type="email" autocomplete="username" autocapitalize="off"></div>'
+   +'<div class="field"><label for="l-pass">Mot de passe</label><input id="l-pass" type="password" autocomplete="current-password"></div>'
+   +(S.msg?'<p class="err" role="alert">'+esc(S.msg)+'</p>':'')
+   +'<div style="margin-top:18px"><button class="btn" data-act="login"'+(S.busy?' disabled':'')+'>'+(S.busy?'Connexion…':'Se connecter')+'</button></div>'
+   +'<p class="foot"><button class="link" data-act="resetcfg">Changer la configuration</button></p></div>';
+}
+function vBoot(){return '<div class="center"><p class="lead">Chargement…</p></div>';}
+
+/* ================= écrans de l'appli ================= */
+function vScan(){
+  var recent=Object.keys(S.products).map(function(e){return {p:S.products[e],last:lastActivity(e)};})
+    .sort(function(a,b){return String(b.last).localeCompare(String(a.last));}).slice(0,6);
+  var h='<div class="wrap"><h1 class="h1">Scanner un produit</h1>';
+  h+='<button class="btn" data-act="cam">'+I.cam+'Scanner avec la caméra</button>';
+  h+='<div style="margin-top:10px"><button class="btn ghost" data-act="photo">Photo du code-barre</button></div>';
+  h+='<div class="field"><label for="code">Code-barre</label><div class="row">'
+    +'<input id="code" class="code" inputmode="numeric" autocomplete="off" placeholder="Scanner ou taper">'
+    +'<button class="btn sq" data-act="find">Ouvrir</button></div>'
+    +'<p class="hint">Avec une douchette, scannez depuis n’importe quel écran : la fiche s’ouvre toute seule.</p></div>';
+  if(S.msg)h+='<p class="err" role="alert">'+esc(S.msg)+'</p>';
+  if(recent.length){
+    h+='<h2 class="h2">Derniers produits</h2><div class="list" style="margin-top:10px">';
+    recent.forEach(function(r){var c=lastOf(r.p.ean,'sale_price').cur;
+      h+='<button class="item" data-act="open" data-ean="'+esc(r.p.ean)+'"><span class="grow"><span class="nm">'+esc(r.p.name)+'</span><span class="small">'+esc(r.p.rayon)+'</span></span><span class="pr">'+(c?dh(c.sale_price):'—')+'</span></button>';});
+    h+='</div>';
+  } else h+='<p class="info" style="margin-top:22px">Aucun produit pour l’instant. Scannez un premier produit pour commencer.</p>';
+  return h+'</div>';
+}
+
+function vNew(){
+  var code=S.ean,L=S.lookup[code]||{};
+  var h='<div class="wrap"><button class="back" data-act="tab" data-v="scan">‹ Scanner</button>';
+  h+='<h1 class="h1">Nouveau produit</h1><p class="small">Code '+esc(code)+'</p>';
+  if(!validEan(code))h+='<p class="warn">Le chiffre de contrôle ne correspond pas. Vérifiez le code avant d’enregistrer.</p>';
+  h+=lookupBox(code);
+  h+='<div class="field"><label for="n-name">Nom du produit</label><input id="n-name" value="'+esc(L.state==='found'?L.name:'')+'" autocomplete="off"></div>';
+  h+='<div class="two"><div class="field"><label for="n-brand">Marque <span class="opt">facultatif</span></label><input id="n-brand" value="'+esc(L.state==='found'?L.brand:'')+'" autocomplete="off"></div>';
+  h+='<div class="field"><label for="n-rayon">Rayon</label><select id="n-rayon">';
+  var ry=L.state==='found'?L.rayon:'Alimentation';
+  RAYONS.forEach(function(r){h+='<option'+(r===ry?' selected':'')+'>'+r+'</option>';});
+  h+='</select></div></div>';
+  h+='<div class="two"><div class="field"><label for="n-buy">Prix d’achat (DH)</label><input id="n-buy" inputmode="decimal" placeholder="0,00"></div>';
+  h+='<div class="field"><label for="n-sale">Prix de vente (DH)</label><input id="n-sale" inputmode="decimal" placeholder="0,00"></div></div>';
+  h+='<p class="hint">Au moins un des deux prix.</p>';
+  h+='<div class="field"><label for="n-note">Détails <span class="opt">facultatif</span></label><textarea id="n-note" placeholder="Fournisseur, format, emplacement…"></textarea></div>';
+  h+='<div style="margin-top:18px"><button class="btn" data-act="create">Enregistrer le produit</button></div></div>';
+  return h;
+}
+
+function deltaTxt(cur,prev,field){
+  if(!cur||!prev)return '';
+  var a=cur[field],b=prev[field],d=a-b;if(Math.abs(d)<0.005)return '';
+  var pc=b>0?' ('+(d>0?'+':'−')+Math.abs(Math.round(d/b*1000)/10).toLocaleString('fr-FR')+' %)':'';
+  return '<span class="'+(d>0?'up':'down')+'">'+(d>0?'+':'−')+dh(Math.abs(d))+pc+'</span>';
+}
+
+function vProduct(){
+  var ean=S.ean,p=S.products[ean];
+  if(!p)return '<div class="wrap"><button class="back" data-act="tab" data-v="scan">‹ Scanner</button><p class="info">Produit introuvable.</p></div>';
+  var sale=lastOf(ean,'sale_price'),buy=lastOf(ean,'purchase_price'),hist=pricesOf(ean);
+  var h='<div class="wrap"><button class="back" data-act="tab" data-v="'+S.from+'">‹ Retour</button>';
+  if(S.editOpen){
+    h+='<h1 class="h1">Modifier le produit</h1><p class="small">Code '+esc(ean)+' (non modifiable)</p>';
+    h+='<div class="field"><label for="e-name">Nom du produit</label><input id="e-name" value="'+esc(p.name)+'"></div>';
+    h+='<div class="two"><div class="field"><label for="e-brand">Marque <span class="opt">facultatif</span></label><input id="e-brand" value="'+esc(p.brand||'')+'"></div>';
+    h+='<div class="field"><label for="e-rayon">Rayon</label><select id="e-rayon">';
+    RAYONS.forEach(function(r){h+='<option'+(r===p.rayon?' selected':'')+'>'+r+'</option>';});
+    h+='</select></div></div><div class="two" style="margin-top:18px"><button class="btn ghost" data-act="canceledit">Annuler</button><button class="btn" data-act="saveedit">Enregistrer</button></div></div>';
+    return h;
+  }
+  h+='<h1 class="h1" style="margin-bottom:6px">'+esc(p.name)+'</h1><div class="meta"><span class="tag">'+esc(p.rayon)+'</span>'
+    +(p.brand?'<span class="small">'+esc(p.brand)+'</span>':'')+'<span class="small">Code '+esc(ean)+'</span>'
+    +'<button class="link" data-act="edit">Modifier</button></div>';
+
+  h+='<div class="card pcard">';
+  if(sale.cur){
+    h+='<p class="plabel">Prix de vente</p><p class="price">'+fmt(sale.cur.sale_price)+'<span>DH</span></p>'
+      +'<p class="sub">Depuis le '+dayFr(sale.cur.recorded_at)+(sale.prev?' '+deltaTxt(sale.cur,sale.prev,'sale_price'):'')+'</p>';
+  } else h+='<p class="plabel">Prix de vente</p><p class="sub">Pas encore saisi</p>';
+  h+='<div class="buy"><div><p class="plabel">Prix d’achat</p>'
+    +(buy.cur?'<p class="sub">Depuis le '+dayFr(buy.cur.recorded_at)+(buy.prev?' '+deltaTxt(buy.cur,buy.prev,'purchase_price'):'')+'</p>':'<p class="sub">Pas encore saisi</p>')
+    +'</div><strong>'+(buy.cur?dh(buy.cur.purchase_price):'—')+'</strong></div>';
+  if(sale.cur&&buy.cur&&sale.cur.sale_price>0){
+    var m=(sale.cur.sale_price-buy.cur.purchase_price)/sale.cur.sale_price*100;
+    h+='<p class="sub" style="margin-top:10px">Marge : <b class="'+(m<0?'up':'')+'">'+dh(sale.cur.sale_price-buy.cur.purchase_price)+' ('+Math.round(m)+' %)</b></p>';
+  }
+  if(S.formOpen){
+    h+='<div class="two"><div class="field"><label for="np-buy">Nouveau prix d’achat</label><input id="np-buy" inputmode="decimal" placeholder="'+(buy.cur?fmt(buy.cur.purchase_price):'0,00')+'"></div>'
+      +'<div class="field"><label for="np-sale">Nouveau prix de vente</label><input id="np-sale" inputmode="decimal" placeholder="'+(sale.cur?fmt(sale.cur.sale_price):'0,00')+'"></div></div>'
+      +'<div class="cmp" id="cmp"></div>'
+      +'<div class="field"><label for="np-note">Note <span class="opt">facultatif</span></label><input id="np-note" placeholder="Fournisseur, promo, correction…"></div>'
+      +'<div class="two" style="margin-top:14px"><button class="btn ghost" data-act="cancelform">Annuler</button><button class="btn" id="np-save" data-act="saveprice" disabled>Enregistrer</button></div>';
+  } else h+='<div style="margin-top:16px"><button class="btn" data-act="openform">Comparer un nouveau prix</button></div>';
+  h+='</div>';
+
+  h+='<h2 class="h2">Historique des prix</h2><p class="lead">Chaque prix est conservé pour toujours. Pour corriger une erreur, saisissez un nouveau prix avec une note.</p>';
+  if(!hist.length)h+='<p class="info">Aucun prix enregistré.</p>';
+  else{
+    h+='<div class="card"><ol class="hist">';
+    hist.forEach(function(x){
+      var parts=[];
+      if(x.purchase_price!=null)parts.push('Achat <b class="v">'+dh(x.purchase_price)+'</b>');
+      if(x.sale_price!=null)parts.push('Vente <b class="v">'+dh(x.sale_price)+'</b>');
+      h+='<li><div><div>'+parts.join('<br>')+'</div>'+(x.note?'<div class="small">'+esc(x.note)+'</div>':'')
+        +(x.pending?'<span class="tag warn" style="display:inline-block;margin-top:5px">En attente d’envoi</span>':'')
+        +'</div><time datetime="'+esc(x.recorded_at)+'">'+dateFr(x.recorded_at)+'</time></li>';
+    });
+    h+='</ol></div>';
+  }
+  return h+'</div>';
+}
+
+function cmpLine(label,cur,v){
+  if(v==null)return '';
+  if(isNaN(v)||v<0)return '<div class="up">'+label+' : montant invalide</div>';
+  if(cur==null)return '<div>'+label+' : <b>'+dh(v)+'</b> (premier prix)</div>';
+  var d=v-cur;
+  if(Math.abs(d)<0.005)return '<div>'+label+' : identique, <b>'+dh(v)+'</b></div>';
+  var pc=cur>0?' ('+(d>0?'+':'−')+Math.abs(Math.round(d/cur*1000)/10).toLocaleString('fr-FR')+' %)':'';
+  return '<div>'+label+' : '+dh(cur)+' → <b>'+dh(v)+'</b> <span class="'+(d>0?'up':'down')+'">'+(d>0?'+':'−')+dh(Math.abs(d))+pc+'</span></div>';
+}
+function formChanges(){
+  var ean=S.ean,sc=lastOf(ean,'sale_price').cur,bc=lastOf(ean,'purchase_price').cur;
+  var s=num(val('np-sale')),b=num(val('np-buy'));
+  var curS=sc?sc.sale_price:null,curB=bc?bc.purchase_price:null;
+  var out={html:cmpLine('Achat',curB,b)+cmpLine('Vente',curS,s),sale:null,buy:null,invalid:false};
+  if(s!=null&&(isNaN(s)||s<=0))out.invalid=true;
+  if(b!=null&&(isNaN(b)||b<0))out.invalid=true;
+  if(!out.invalid){
+    if(s!=null&&(curS==null||Math.abs(s-curS)>=0.005))out.sale=s;
+    if(b!=null&&(curB==null||Math.abs(b-curB)>=0.005))out.buy=b;
+  }
+  return out;
+}
+function updateCmp(){
+  var box=document.getElementById('cmp'),btn=document.getElementById('np-save');if(!box||!btn)return;
+  var c=formChanges();
+  box.innerHTML=c.html;
+  btn.disabled=c.invalid||(c.sale==null&&c.buy==null);
+  if(!c.invalid&&c.sale==null&&c.buy==null&&(val('np-sale')||val('np-buy')))box.innerHTML+='<div>Aucun changement : rien à enregistrer.</div>';
+}
+
+function vList(){
+  var q=S.q.trim().toLowerCase();
+  var all=Object.keys(S.products).map(function(e){return S.products[e];});
+  var items=all.filter(function(p){return (S.rayon==='Tous'||p.rayon===S.rayon)&&(!q||p.name.toLowerCase().indexOf(q)>=0||p.ean.indexOf(q)>=0||(p.brand||'').toLowerCase().indexOf(q)>=0);})
+    .sort(function(a,b){return a.name.localeCompare(b.name,'fr');});
+  var h='<div class="wrap"><h1 class="h1">Produits</h1>';
+  h+='<input id="q" type="search" placeholder="Rechercher un nom, une marque, un code" value="'+esc(S.q)+'" autocomplete="off">';
+  h+='<div class="chips">';
+  ['Tous'].concat(RAYONS).forEach(function(r){h+='<button class="chip" data-act="rayon" data-v="'+r+'" aria-pressed="'+(S.rayon===r)+'">'+r+'</button>';});
+  h+='</div><div style="margin-top:14px">';
+  if(!all.length)h+='<p class="info">Aucun produit enregistré. Scannez un premier produit pour commencer.</p>';
+  else if(!items.length)h+='<p class="info">Aucun produit ne correspond à cette recherche.</p>';
+  else{
+    h+='<p class="small" style="margin:0 0 8px">'+items.length+' produit'+(items.length>1?'s':'')+'</p><div class="list">';
+    items.forEach(function(p){var s=lastOf(p.ean,'sale_price').cur,b=lastOf(p.ean,'purchase_price').cur;
+      h+='<button class="item" data-act="open" data-ean="'+esc(p.ean)+'" data-from="list"><span class="grow"><span class="nm">'+esc(p.name)+'</span><span class="small">'+esc(p.rayon)+(b?', achat '+dh(b.purchase_price):'')+'</span></span><span class="pr">'+(s?dh(s.sale_price):'<span class="small">—</span>')+'</span></button>';});
+    h+='</div>';
+  }
+  return h+'</div></div>';
+}
+
+function syncLabel(){
+  var n=pendingCount(),st=S.sync.state;
+  if(st==='sync')return 'Synchronisation…';
+  if(st==='offline')return n?'Hors ligne, '+n+' en attente':'Hors ligne';
+  if(st==='error')return 'Erreur de synchronisation';
+  if(n)return n+' en attente';
+  return 'Synchronisé';
+}
+function vSettings(){
+  var n=pendingCount();
+  var h='<div class="wrap"><h1 class="h1">Réglages</h1>';
+  h+='<div class="card"><p class="plabel">Synchronisation</p><p style="margin:6px 0 0;font-weight:700">'+esc(syncLabel())+'</p>';
+  if(n)h+='<p class="sub">'+n+' enregistrement'+(n>1?'s':'')+' à envoyer. Ils partent automatiquement dès que le réseau revient.</p>';
+  if(S.sync.state==='error'&&S.sync.msg)h+='<p class="err">'+esc(S.sync.msg)+'</p>';
+  h+='<div style="margin-top:14px"><button class="btn ghost" data-act="syncnow">Synchroniser maintenant</button></div></div>';
+  h+='<div class="card" style="margin-top:14px"><p class="plabel">Compte</p><p style="margin:6px 0 0">'+esc(S.email||'Gérant')+'</p>'
+    +'<p class="sub">'+Object.keys(S.products).length+' produits, '+S.prices.length+' relevés de prix.</p>'
+    +'<div style="margin-top:14px"><button class="btn danger" data-act="logout">Se déconnecter</button></div></div>';
+  h+='<div class="card" style="margin-top:14px"><p class="plabel">Installer l’appli</p>'
+    +'<p class="sub">iPhone : dans Safari, bouton Partager puis « Sur l’écran d’accueil ».<br>Android : dans Chrome, menu ⋮ puis « Installer l’application ».</p></div>';
+  h+='<p class="foot">Market Babylon '+VERSION+'. Les prix sont stockés en ligne et conservés pour toujours, même si le téléphone change.</p></div>';
+  return h;
+}
+
+/* ================= rendu ================= */
+function renderPill(){
+  var p=document.getElementById('pill');
+  if(S.screen!=='app'){p.hidden=true;return;}
+  var st=S.sync.state,cls=st==='sync'?'sync':st==='offline'?'offline':st==='error'?'error':pendingCount()?'pending':'';
+  p.hidden=false;p.className='pill '+cls;p.innerHTML='<i></i>'+esc(syncLabel());
+}
+function renderTabs(){
+  var t=document.getElementById('tabs');
+  if(S.screen!=='app'){t.hidden=true;return;}
+  t.hidden=false;
+  var cur=(S.view==='product'||S.view==='new')?S.from:S.view;
+  t.innerHTML=[['scan','Scanner',I.scan],['list','Produits',I.list],['settings','Réglages',I.gear]].map(function(x){
+    return '<button data-act="tab" data-v="'+x[0]+'"'+(cur===x[0]?' aria-current="page"':'')+'>'+x[2]+x[1]+'</button>';}).join('');
+}
+function render(){
+  var keep={values:{},focus:null,sel:null};
+  if(!S.reset){
+    $view.querySelectorAll('input,select,textarea').forEach(function(el){if(el.id&&el.type!=='file')keep.values[el.id]=el.value;});
+    var a=document.activeElement;
+    if(a&&a.id&&$view.contains(a)){keep.focus=a.id;try{keep.sel=[a.selectionStart,a.selectionEnd];}catch(e){}}
+  }
+  S.reset=false;
+  var html;
+  if(S.screen==='boot')html=vBoot();
+  else if(S.screen==='setup')html=vSetup();
+  else if(S.screen==='login')html=vLogin();
+  else html={scan:vScan,product:vProduct,'new':vNew,list:vList,settings:vSettings}[S.view]();
+  $view.innerHTML=html;
+  Object.keys(keep.values).forEach(function(id){var el=document.getElementById(id);if(el&&keep.values[id]!=='')el.value=keep.values[id];});
+  if(keep.focus){var el=document.getElementById(keep.focus);if(el){el.focus();try{if(keep.sel&&keep.sel[0]!=null)el.setSelectionRange(keep.sel[0],keep.sel[1]);}catch(e){}}}
+  if(S.view==='product'&&S.formOpen)updateCmp();
+  renderTabs();renderPill();
+}
+function go(view,ean,from){
+  stopCamera();
+  S.view=view;if(ean!==undefined)S.ean=ean;
+  if(view==='scan'||view==='list'||view==='settings')S.from=view;
+  if(from)S.from=from;
+  S.formOpen=false;S.editOpen=false;S.reset=true;S.rayonTouched=false;
+  if(view!=='scan')S.msg='';
+  render();
+  document.getElementById('main').scrollTop=0;
+}
+function handleCode(raw){
+  if(S.screen!=='app')return;
+  var code=String(raw||'').replace(/\D/g,'');
+  if(!code){S.view='scan';S.msg='Saisissez ou scannez un code-barre (chiffres uniquement).';S.reset=true;render();return;}
+  if(code.length<8||code.length>14){S.view='scan';S.msg='Code-barre invalide : il faut entre 8 et 14 chiffres.';S.reset=true;render();return;}
+  S.msg='';
+  if(S.products[code]){go('product',code);return;}
+  lookup(code);
+  go('new',code);
+}
+
+/* ================= actions ================= */
+function saveCfg(){
+  var url=val('c-url').trim().replace(/\/+$/,''),key=val('c-key').trim();
+  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url)){S.msg='Adresse invalide : elle doit ressembler à https://xxxx.supabase.co';render();return;}
+  if(key.length<30){S.msg='Clé publique trop courte : copiez-la en entier.';render();return;}
+  setJ(K.cfg,{url:url,key:key});S.msg='';boot();
+}
+function login(){
+  var mail=val('l-mail').trim(),pass=val('l-pass');
+  if(!mail||!pass){S.msg='Saisissez l’email et le mot de passe.';render();return;}
+  if(!navigator.onLine){S.msg='Connexion internet nécessaire pour se connecter.';render();return;}
+  S.busy=true;S.msg='';render();
+  sb.auth.signInWithPassword({email:mail,password:pass}).then(function(r){
+    S.busy=false;
+    if(r.error){S.msg=/invalid/i.test(r.error.message)?'Email ou mot de passe incorrect.':r.error.message;render();return;}
+    S.email=mail;S.screen='app';S.reset=true;go('scan');sync();
+  }).catch(function(){S.busy=false;S.msg='Connexion impossible. Vérifiez le réseau.';render();});
+}
+function create(){
+  var ean=S.ean,name=val('n-name').trim();
+  if(!name){toast('Indiquez le nom du produit.');return;}
+  var sale=num(val('n-sale')),buy=num(val('n-buy'));
+  if(sale==null&&buy==null){toast('Indiquez au moins un prix : achat ou vente.');return;}
+  if(sale!=null&&(isNaN(sale)||sale<=0)){toast('Le prix de vente doit être un nombre supérieur à 0.');return;}
+  if(buy!=null&&(isNaN(buy)||buy<0)){toast('Le prix d’achat n’est pas un nombre valide.');return;}
+  var L=S.lookup[ean]||{};
+  var prod={ean:ean,name:name,brand:val('n-brand').trim(),rayon:val('n-rayon'),source:L.state==='found'&&L.name===name?L.source:'manuel'};
+  S.products[ean]=Object.assign({created_at:nowIso(),pending:true},prod);
+  var row={client_id:uuid(),ean:ean,sale_price:sale,purchase_price:buy,note:val('n-note').trim()||null,recorded_at:nowIso()};
+  S.prices.push(Object.assign({pending:true},row,{note:row.note||''}));
+  S.outbox.push({id:uuid(),type:'product',row:prod});
+  queue({type:'price',row:row});
+  toast('Produit enregistré.');
+  go('product',ean,'scan');
+}
+function savePrice(){
+  var c=formChanges();
+  if(c.invalid){toast('Un des montants n’est pas valide.');return;}
+  if(c.sale==null&&c.buy==null){toast('Prix identiques : rien à enregistrer.');return;}
+  var row={client_id:uuid(),ean:S.ean,sale_price:c.sale,purchase_price:c.buy,note:val('np-note').trim()||null,recorded_at:nowIso()};
+  S.prices.push(Object.assign({pending:true},row,{note:row.note||''}));
+  queue({type:'price',row:row});
+  S.formOpen=false;S.reset=true;render();
+  toast('Nouveau prix enregistré. L’ancien reste dans l’historique.');
+}
+function saveEdit(){
+  var name=val('e-name').trim();if(!name){toast('Le nom ne peut pas être vide.');return;}
+  var patch={name:name,brand:val('e-brand').trim(),rayon:val('e-rayon')};
+  Object.assign(S.products[S.ean],patch);
+  queue({type:'product_update',ean:S.ean,patch:patch});
+  S.editOpen=false;S.reset=true;render();toast('Produit modifié.');
+}
+function logout(){
+  var n=pendingCount();
+  if(n&&!confirm(n+' enregistrement(s) pas encore envoyé(s). Ils resteront sur ce téléphone et partiront à la prochaine connexion. Se déconnecter quand même ?'))return;
+  if(!n&&!confirm('Se déconnecter ?'))return;
+  sb.auth.signOut().then(function(){},function(){});
+  S.screen='login';S.reset=true;render();
+}
+
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;
+  var a=b.dataset.act;
+  if(a==='tab'){if(S.screen==='app')go(b.dataset.v);}
+  else if(a==='cam')startCamera();
+  else if(a==='camstop')stopCamera();
+  else if(a==='photo')document.getElementById('photo').click();
+  else if(a==='find')handleCode(val('code'));
+  else if(a==='open')go('product',b.dataset.ean,b.dataset.from||'scan');
+  else if(a==='rayon'){S.rayon=b.dataset.v;render();}
+  else if(a==='openform'){S.formOpen=true;render();}
+  else if(a==='cancelform'){S.formOpen=false;S.reset=true;render();}
+  else if(a==='edit'){S.editOpen=true;S.reset=true;render();}
+  else if(a==='canceledit'){S.editOpen=false;S.reset=true;render();}
+  else if(a==='saveedit')saveEdit();
+  else if(a==='create')create();
+  else if(a==='saveprice')savePrice();
+  else if(a==='savecfg')saveCfg();
+  else if(a==='resetcfg'){if(confirm('Effacer la configuration de ce téléphone ?')){localStorage.removeItem(K.cfg);S.screen='setup';S.reset=true;render();}}
+  else if(a==='login')login();
+  else if(a==='logout')logout();
+  else if(a==='syncnow')sync();
+});
+document.addEventListener('input',function(e){
+  var id=e.target.id;
+  if(id==='q'){S.q=e.target.value;render();}
+  else if(id==='np-sale'||id==='np-buy')updateCmp();
+});
+document.addEventListener('change',function(e){if(e.target.id==='n-rayon')S.rayonTouched=true;});
+
+/* Douchette : elle tape le code comme un clavier puis Entrée ou Tab */
+var buf='',bufT=0;
+document.addEventListener('keydown',function(e){
+  var t=e.target,tag=t&&t.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
+    if(t.id==='code'&&(e.key==='Enter'||e.key==='Tab')&&t.value.trim()){e.preventDefault();handleCode(t.value);}
+    else if(t.id==='l-pass'&&e.key==='Enter'){e.preventDefault();login();}
+    return;
+  }
+  var now=Date.now();if(now-bufT>400)buf='';bufT=now;
+  if(/^\d$/.test(e.key))buf+=e.key;
+  else if((e.key==='Enter'||e.key==='Tab')&&buf.length>=8){e.preventDefault();var c=buf;buf='';handleCode(c);}
+});
+
+/* ================= scan caméra et photo ================= */
+var reader=null,camOn=false,nStream=null,nTimer=null;
+var FORMATS=['ean_13','ean_8','upc_a','upc_e','code_128'];
+function Z(){return (window.ZXing&&window.ZXing.BrowserMultiFormatReader)?window.ZXing:null;}
+function hints(){
+  var z=Z(),H=new Map(),F=z.BarcodeFormat;
+  H.set(z.DecodeHintType.POSSIBLE_FORMATS,[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128]);
+  H.set(z.DecodeHintType.TRY_HARDER,true);return H;
+}
+function beep(){
+  try{if(navigator.vibrate)navigator.vibrate(70);
+    var C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+    var c=new C(),o=c.createOscillator(),g=c.createGain();
+    o.frequency.value=1800;g.gain.value=0.08;o.connect(g);g.connect(c.destination);
+    o.start();o.stop(c.currentTime+0.09);setTimeout(function(){c.close();},300);
+  }catch(e){}
+}
+function stopCamera(){
+  camOn=false;
+  if(reader){try{reader.reset();}catch(e){}reader=null;}
+  clearInterval(nTimer);nTimer=null;
+  if(nStream){nStream.getTracks().forEach(function(t){t.stop();});nStream=null;}
+  var v=document.getElementById('camv');if(v&&v.srcObject){try{v.srcObject.getTracks().forEach(function(t){t.stop();});}catch(e){}v.srcObject=null;}
+  document.getElementById('cam').hidden=true;
+}
+function onCode(c){if(!c)return;stopCamera();beep();handleCode(c);}
+function camFail(e){
+  stopCamera();
+  if(e&&e.name==='NotAllowedError')toast('Caméra refusée. Autorisez l’appareil photo pour ce site (Réglages > Safari > Appareil photo), ou utilisez « Photo du code-barre ».');
+  else toast('Caméra inaccessible. Utilisez « Photo du code-barre » ou la douchette.');
+}
+var CONSTRAINTS={audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}};
+function startCamera(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camFail();return;}
+  var z=Z();
+  if(!z){if('BarcodeDetector' in window){startNative();return;}
+    toast('Module de scan indisponible (connexion nécessaire au premier lancement). Utilisez la saisie ou la douchette.');return;}
+  var v=document.getElementById('camv');
+  document.getElementById('cam').hidden=false;camOn=true;
+  try{
+    reader=new z.BrowserMultiFormatReader(hints(),250);
+    reader.decodeFromConstraints(CONSTRAINTS,v,function(res){if(res&&camOn)onCode(res.getText());}).catch(camFail);
+  }catch(e){camFail(e);}
+}
+function supported(){
+  return Promise.resolve(window.BarcodeDetector.getSupportedFormats?window.BarcodeDetector.getSupportedFormats():FORMATS)
+    .catch(function(){return FORMATS;}).then(function(sup){return FORMATS.filter(function(x){return sup.indexOf(x)>=0;});});
+}
+function startNative(){
+  supported().then(function(ok){
+    if(!ok.length)throw new Error('formats');
+    var det=new window.BarcodeDetector({formats:ok});
+    return navigator.mediaDevices.getUserMedia(CONSTRAINTS).then(function(stream){
+      nStream=stream;camOn=true;
+      var v=document.getElementById('camv');v.srcObject=stream;
+      document.getElementById('cam').hidden=false;v.play().catch(function(){});
+      var busy=false;
+      nTimer=setInterval(function(){
+        if(busy||v.readyState<2)return;busy=true;
+        det.detect(v).then(function(r){busy=false;if(r&&r.length&&camOn)onCode(r[0].rawValue);}).catch(function(){busy=false;});
+      },250);
+    });
+  }).catch(camFail);
+}
+function loadImg(file){
+  return new Promise(function(ok,ko){var u=URL.createObjectURL(file),i=new Image();
+    i.onload=function(){ok(i);setTimeout(function(){URL.revokeObjectURL(u);},1000);};i.onerror=ko;i.src=u;});
+}
+function toCanvas(img,rot){
+  var max=1600,w=img.naturalWidth,h=img.naturalHeight,k=Math.min(1,max/Math.max(w,h));
+  w=Math.round(w*k);h=Math.round(h*k);
+  var c=document.createElement('canvas'),x=c.getContext('2d');
+  if(rot){c.width=h;c.height=w;x.translate(h/2,w/2);x.rotate(Math.PI/2);x.drawImage(img,-w/2,-h/2,w,h);}
+  else{c.width=w;c.height=h;x.drawImage(img,0,0,w,h);}
+  return c;
+}
+function nativeRead(c){
+  if(!('BarcodeDetector' in window))return Promise.resolve(null);
+  return supported().then(function(ok){if(!ok.length)return null;
+    return new window.BarcodeDetector({formats:ok}).detect(c).then(function(r){return r&&r.length?r[0].rawValue:null;});})
+    .catch(function(){return null;});
+}
+function zxRead(c){
+  var z=Z();if(!z)return Promise.resolve(null);
+  try{return new z.BrowserMultiFormatReader(hints()).decodeFromImageUrl(c.toDataURL('image/jpeg',0.92))
+    .then(function(r){return r?r.getText():null;}).catch(function(){return null;});}
+  catch(e){return Promise.resolve(null);}
+}
+function readPhoto(file){
+  toast('Lecture du code-barre…');
+  loadImg(file).then(function(img){
+    var c0=toCanvas(img,false);
+    return nativeRead(c0).then(function(r){return r||zxRead(c0);})
+      .then(function(r){if(r)return r;var c1=toCanvas(img,true);return nativeRead(c1).then(function(x){return x||zxRead(c1);});});
+  }).then(function(code){
+    if(code)onCode(code);
+    else toast('Aucun code-barre lu. Reprenez la photo plus près, code net et entier dans l’image.');
+  }).catch(function(){toast('Photo illisible. Réessayez.');});
+}
+document.getElementById('photo').addEventListener('change',function(e){
+  var f=e.target.files&&e.target.files[0];e.target.value='';if(f)readPhoto(f);
+});
+
+/* ================= démarrage ================= */
+function boot(){
+  loadLocal();
+  var cfg=getJ(K.cfg);
+  if(!cfg){S.screen='setup';S.reset=true;render();return;}
+  if(!window.supabase||!window.supabase.createClient){
+    /* Bibliothèque non chargée (hors ligne au tout premier lancement) : on travaille en local */
+    S.screen='app';S.sync={state:'offline',msg:''};S.reset=true;render();return;
+  }
+  sb=window.supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'mb-auth'}});
+  sb.auth.getSession().then(function(r){
+    var s=r&&r.data&&r.data.session;
+    if(s){S.email=(s.user&&s.user.email)||'';S.screen='app';S.reset=true;render();sync();}
+    else{S.screen='login';S.reset=true;render();}
+  }).catch(function(){S.screen='login';S.reset=true;render();});
+}
+window.addEventListener('online',function(){sync();});
+window.addEventListener('offline',function(){if(S.screen==='app')setSync('offline');});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')sync();});
+setInterval(function(){if(document.visibilityState==='visible')sync();},60000);
+
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+render();
+boot();
+})();
+</script>
+</body>
+</html>
