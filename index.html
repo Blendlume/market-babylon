@@ -337,6 +337,19 @@ main{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
 .rsep{margin:8px 10px 2px;font-size:12px;font-weight:800;color:var(--muted)}
 @media (prefers-reduced-motion:reduce){#sheet .pn{animation:none}}
 @media (min-width:900px){#sheet{align-items:center}#sheet .pn{border-radius:22px}}
+
+/* ===== 2.0.3 : confirmation intégrée, corbeille ===== */
+#dlg{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:20px}
+#dlg[hidden]{display:none}
+#dlg .bd{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+#dlg .bx{position:relative;width:100%;max-width:400px;background:var(--surface);color:var(--ink);border-radius:20px;padding:20px 18px 16px;box-shadow:0 24px 60px -20px rgba(0,0,0,.7);border:1px solid var(--line)}
+#dlg h2{font-family:var(--serif);font-size:19px;margin:0 0 8px}
+#dlg p{margin:0 0 16px;font-size:14px;color:var(--muted);line-height:1.5}
+#dlg .bt{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn.dangerfill{background:var(--up);color:#fff;box-shadow:none}
+.banner.trash{background:color-mix(in srgb,var(--up) 13%,transparent);color:var(--up)}
+.banner .bb{display:flex;gap:8px;flex:none}
+@media (max-width:420px){.banner.trash{flex-direction:column;align-items:stretch}.banner.trash .bb{display:grid;grid-template-columns:1fr 1fr}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -360,13 +373,15 @@ main{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
 </div>
 <input type="file" id="photo" accept="image/*" hidden>
 <input type="file" id="pphoto" accept="image/*" hidden>
+<div id="dlg" hidden role="alertdialog" aria-modal="true" aria-labelledby="dlg-t" aria-describedby="dlg-x"><div class="bd" data-act="dlgno"></div><div class="bx"><h2 id="dlg-t"></h2><p id="dlg-x"></p><div class="bt"><button class="btn ghost" data-act="dlgno">Annuler</button><button class="btn" id="dlg-ok" data-act="dlgok">Confirmer</button></div></div></div>
 <div id="sheet" hidden role="dialog" aria-modal="true" aria-label="Choisir un rayon"><div class="bd" data-act="closesheet"></div><div class="pn"><div class="gr"></div><h2>Rayon</h2><div class="ls" id="sheetlist"></div></div></div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
 (function(){
 'use strict';
-var VERSION='2.0.2';
+var VERSION='2.0.3';
+var TRASH_DAYS=30;
 var RAYONS=['Alimentation','Boissons','Frais et surgelés','Ménage et entretien','Hygiène et cosmétique','Parfumerie','Tabac, snus et vape','Accessoires téléphone','Électronique et câbles','Quincaillerie','Vêtements','Papeterie et jouets','Autre'];
 /* Rayons : la liste de base + tous les rayons déjà utilisés par un produit (y compris ceux créés par le gérant) */
 function rayonsAll(){
@@ -492,9 +507,13 @@ function sync(){
   if(syncing){again=true;return;}
   if(!navigator.onLine){setSync('offline');return;}
   syncing=true;setSync('sync');
-  flush().then(pull).then(function(){setSync(S.outbox.length?'pending':'ok');})
+  flush().then(pull).then(purgeTrash).then(function(){setSync(S.outbox.length?'pending':'ok');})
   .catch(function(e){setSync(navigator.onLine?'error':'offline',e&&e.message?e.message:String(e));})
   .then(function(){syncing=false;if(again){again=false;sync();}});
+}
+/* Efface côté serveur les produits restés plus de 30 jours dans la corbeille */
+function purgeTrash(){
+  return sb.rpc('mb_purge_deleted').then(function(){return reconcile();},function(){}).then(function(){saveLocal();render();});
 }
 function flush(){
   var ops=S.outbox.slice();
@@ -507,20 +526,25 @@ function flush(){
   ups.forEach(function(u){p=p.then(function(){return sb.from('products').update(u.patch).eq('ean',u.ean).then(chk);});});
   if(prs.length)p=p.then(function(){return sb.from('prices').upsert(prs,{onConflict:'client_id',ignoreDuplicates:true}).then(chk);});
   return p.then(function(){
-    var done={};ops.forEach(function(o){if(o.type!=='market'&&o.type!=='archive'&&o.type!=='product_delete')done[o.id]=1;});
+    var done={};ops.forEach(function(o){if(o.type!=='market'&&o.type!=='archive'&&o.type!=='trash'&&o.type!=='product_delete')done[o.id]=1;});
     S.outbox=S.outbox.filter(function(o){return !done[o.id];});
     var sent={};prs.forEach(function(r){sent[r.client_id]=1;});
     S.prices.forEach(function(x){if(sent[x.client_id])delete x.pending;});
     prods.forEach(function(r){if(S.products[r.ean])delete S.products[r.ean].pending;});
     saveLocal();
   }).then(function(){
-    var side=ops.filter(function(o){return o.type==='archive'||o.type==='product_delete';});
+    var side=ops.filter(function(o){return o.type==='archive'||o.type==='trash'||o.type==='product_delete';});
     var q=Promise.resolve();
     side.forEach(function(o){
       q=q.then(function(){
-        var call=o.type==='archive'?sb.from('products').update({archived_at:o.archived_at}).eq('ean',o.ean):sb.rpc('mb_delete_product',{p_ean:o.ean});
+        var call=o.type==='archive'?sb.from('products').update({archived_at:o.archived_at}).eq('ean',o.ean)
+          :o.type==='trash'?sb.from('products').update({deleted_at:o.deleted_at}).eq('ean',o.ean)
+          :sb.rpc('mb_delete_product',{p_ean:o.ean});
         return call.then(chk).then(function(){S.outbox=S.outbox.filter(function(x){return x.id!==o.id;});saveLocal();})
-          .catch(function(e){if(navigator.onLine&&o.type==='product_delete'){S.outbox=S.outbox.filter(function(x){return x.id!==o.id;});saveLocal();toast('Suppression refusée par le serveur. Vérifiez la mise à jour de la base.');}});
+          .catch(function(e){
+            if(!navigator.onLine)return;
+            if(!o.warned){o.warned=true;saveLocal();toast('Le serveur a refusé l’action : '+((e&&e.message)?e.message:'erreur inconnue')+'. Elle sera retentée.');}
+          });
       });
     });
     return q;
@@ -554,7 +578,7 @@ function pull(){
     rows.forEach(function(r){
       var loc=S.products[r.ean];
       var hasPendingEdit=S.outbox.some(function(o){return o.type==='product_update'&&o.ean===r.ean;});
-      if(!hasPendingEdit||!loc)S.products[r.ean]={ean:r.ean,name:r.name,brand:r.brand||'',rayon:r.rayon,source:r.source,created_at:r.created_at,updated_at:r.updated_at,archived_at:r.archived_at||null};
+      if(!hasPendingEdit||!loc)S.products[r.ean]={ean:r.ean,name:r.name,brand:r.brand||'',rayon:r.rayon,source:r.source,created_at:r.created_at,updated_at:r.updated_at,archived_at:r.archived_at||null,deleted_at:r.deleted_at||null};
     });
     if(rows.length)lp.products=rows[rows.length-1].updated_at;
     return pullTable('prices','created_at',lp.prices);
@@ -785,7 +809,7 @@ function vBoot(){return '<div class="center"><p class="lead">Chargement…</p></
 
 /* ================= écrans de l'appli ================= */
 function vScan(){
-  var recent=Object.keys(S.products).filter(function(e){return !S.products[e].archived_at;}).map(function(e){return {p:S.products[e],last:lastActivity(e)};})
+  var recent=Object.keys(S.products).filter(function(e){return !S.products[e].archived_at&&!S.products[e].deleted_at;}).map(function(e){return {p:S.products[e],last:lastActivity(e)};})
     .sort(function(a,b){return String(b.last).localeCompare(String(a.last));}).slice(0,6);
   var h='<div class="wrap"><div class="viewfinder"><div class="vf-zone" aria-hidden="true"><i class="c c1"></i><i class="c c2"></i><i class="c c3"></i><i class="c c4"></i>'+I.bars+'<i class="beam"></i></div>';
   h+='<button class="btn" data-act="cam">'+I.cam+'Scanner avec la caméra</button>';
@@ -804,7 +828,7 @@ function vScan(){
 }
 function itemRow(p,from){
   var c=lastOf(p.ean,'sale_price').cur;
-  return '<button class="item" data-act="open" data-ean="'+esc(p.ean)+'" data-from="'+from+'"><span class="grow"><span class="nm">'+esc(p.name)+'</span><span class="small">'+esc(p.rayon||'Sans rayon')+(p.archived_at?', archivé':'')+'</span></span>'
+  return '<button class="item" data-act="open" data-ean="'+esc(p.ean)+'" data-from="'+from+'"><span class="grow"><span class="nm">'+esc(p.name)+'</span><span class="small">'+esc(p.rayon||'Sans rayon')+(p.deleted_at?', corbeille, '+daysLeft(p)+' j restants':(p.archived_at?', archivé':''))+'</span></span>'
     +'<span class="pr">'+(c?fmt(c.sale_price)+'<small>DH</small>':'<span class="small">—</span>')+'</span></button>';
 }
 
@@ -958,7 +982,8 @@ function vProduct(){
   }
   h+='<h1 class="ptitle">'+esc(p.name)+'</h1><div class="meta"><span class="tag">'+esc(p.rayon||'Sans rayon')+'</span>'
     +(p.brand?'<span class="small">'+esc(p.brand)+'</span>':'')+'<span class="small">Code '+esc(ean)+'</span></div>';
-  if(p.archived_at)h+='<div class="banner"><span>Archivé le '+dayFr(p.archived_at)+'. Il n’apparaît plus dans la liste.</span><button class="btn sm" data-act="restore">Restaurer</button></div>';
+  if(p.deleted_at)h+='<div class="banner trash"><span>Dans la corbeille depuis le '+dayFr(p.deleted_at)+'. Suppression définitive dans '+daysLeft(p)+' jour'+(daysLeft(p)>1?'s':'')+'.</span><span class="bb"><button class="btn sm" data-act="restoretrash">Restaurer</button><button class="btn sm danger" data-act="purgenow">Effacer</button></span></div>';
+  else if(p.archived_at)h+='<div class="banner"><span>Archivé le '+dayFr(p.archived_at)+'. Il n’apparaît plus dans la liste.</span><button class="btn sm" data-act="restore">Restaurer</button></div>';
 
   h+='<div class="pgrid"><div class="col">';
   h+='<div class="pcard">';
@@ -1000,32 +1025,68 @@ function vProduct(){
   }
   h+='<h2 class="h2">Gérer le produit</h2><div class="actions"><button class="btn ghost" data-act="edit">Modifier</button>'
     +(p.archived_at?'<button class="btn ghost" data-act="restore">Restaurer</button>':'<button class="btn ghost" data-act="archive">Archiver</button>')+'</div>';
-  h+='<p class="hint">Archiver retire le produit des listes et garde tout son historique. C’est le choix conseillé.</p>';
-  h+='<div style="margin-top:12px"><button class="btn danger" data-act="delete">Supprimer définitivement</button></div>';
+  if(!p.deleted_at){
+    h+='<p class="hint">Archiver retire le produit des listes et garde tout son historique. Supprimer l’envoie dans la corbeille pendant '+TRASH_DAYS+' jours, puis l’efface avec son historique.</p>';
+    h+='<div style="margin-top:12px"><button class="btn danger" data-act="delete">Supprimer le produit</button></div>';
+  }
   h+='</div></div>';
   return h+'</div>';
 }
+var dlgCb=null;
+function askConfirm(o){
+  document.getElementById('dlg-t').textContent=o.title;
+  document.getElementById('dlg-x').textContent=o.text||'';
+  var ok=document.getElementById('dlg-ok');ok.textContent=o.ok||'Confirmer';ok.className='btn'+(o.danger?' dangerfill':'');
+  dlgCb=o.onOk;document.getElementById('dlg').hidden=false;ok.focus();
+}
+function closeDlg(run){
+  var d=document.getElementById('dlg');if(d.hidden)return;
+  d.hidden=true;var cb=dlgCb;dlgCb=null;if(run&&cb)cb();
+}
+function daysLeft(p){return Math.max(0,Math.ceil(TRASH_DAYS-(Date.now()-new Date(p.deleted_at).getTime())/864e5));}
 function archiveProduct(on){
   var ean=S.ean,p=S.products[ean];if(!p)return;
-  if(on&&!confirm('Archiver « '+p.name+' » ? Il disparaîtra de la liste, son historique est conservé et vous pourrez le restaurer.'))return;
-  p.archived_at=on?nowIso():null;
-  queue({type:'archive',ean:ean,archived_at:p.archived_at});
-  S.reset=true;render();toast(on?'Produit archivé. Son historique est conservé.':'Produit restauré.');
+  function run(){
+    p.archived_at=on?nowIso():null;
+    queue({type:'archive',ean:ean,archived_at:p.archived_at});
+    S.reset=true;render();toast(on?'Produit archivé. Son historique est conservé.':'Produit restauré.');
+  }
+  if(!on){run();return;}
+  askConfirm({title:'Archiver ce produit ?',text:'« '+p.name+' » disparaîtra de la liste. Son historique est conservé et vous pourrez le restaurer.',ok:'Archiver',onOk:run});
 }
+/* Supprimer : le produit va dans la corbeille 30 jours (restaurable), puis il est effacé avec son historique */
 function deleteProduct(){
   var ean=S.ean,p=S.products[ean];if(!p)return;
-  var n=S.prices.filter(function(x){return x.ean===ean;}).length+S.market.filter(function(x){return x.ean===ean;}).length;
-  if(n&&!confirm('Supprimer définitivement « '+p.name+' » efface aussi ses '+n+' prix enregistrés. Pour garder l’historique, utilisez plutôt Archiver. Continuer ?'))return;
-  var typed=prompt('Pour confirmer, tapez SUPPRIMER');
-  if(String(typed||'').trim().toUpperCase()!=='SUPPRIMER'){toast('Suppression annulée.');return;}
-  var wasPending=S.outbox.some(function(o){return o.type==='product'&&o.row.ean===ean;});
-  S.outbox=S.outbox.filter(function(o){return !((o.type==='product'&&o.row.ean===ean)||((o.type==='price'||o.type==='market')&&o.row.ean===ean)||((o.type==='product_update'||o.type==='archive')&&o.ean===ean));});
+  askConfirm({title:'Supprimer ce produit ?',
+    text:'« '+p.name+' » ira dans la corbeille pendant '+TRASH_DAYS+' jours : vous pourrez le restaurer. Passé ce délai, il sera supprimé définitivement avec son historique de prix.',
+    ok:'Confirmer la suppression',danger:true,onOk:function(){
+      var pending=S.outbox.some(function(o){return o.type==='product'&&o.row.ean===ean;});
+      if(pending){purgeLocal(ean);toast('Produit supprimé.');go(S.from==='product'?'scan':S.from);return;}
+      p.deleted_at=nowIso();
+      S.outbox=S.outbox.filter(function(o){return !(o.type==='trash'&&o.ean===ean);});
+      queue({type:'trash',ean:ean,deleted_at:p.deleted_at});
+      toast('Produit envoyé dans la corbeille ('+TRASH_DAYS+' jours).');go(S.from==='product'?'scan':S.from);
+    }});
+}
+function restoreTrash(){
+  var ean=S.ean,p=S.products[ean];if(!p)return;
+  p.deleted_at=null;
+  S.outbox=S.outbox.filter(function(o){return !(o.type==='trash'&&o.ean===ean);});
+  queue({type:'trash',ean:ean,deleted_at:null});
+  S.reset=true;render();toast('Produit restauré.');
+}
+function purgeLocal(ean){
+  S.outbox=S.outbox.filter(function(o){return !((o.type==='product'&&o.row.ean===ean)||((o.type==='price'||o.type==='market')&&o.row.ean===ean)||((o.type==='product_update'||o.type==='archive'||o.type==='trash')&&o.ean===ean));});
   S.prices=S.prices.filter(function(x){return x.ean!==ean;});S.market=S.market.filter(function(x){return x.ean!==ean;});
   delete S.products[ean];delete S.lookup[ean];saveLocal();
-  if(!wasPending)queue({type:'product_delete',ean:ean});
-  toast('Produit supprimé.');go(S.from==='product'?'scan':S.from);
 }
-
+function purgeNow(){
+  var ean=S.ean,p=S.products[ean];if(!p||!p.deleted_at)return;
+  var n=S.prices.filter(function(x){return x.ean===ean;}).length+S.market.filter(function(x){return x.ean===ean;}).length;
+  askConfirm({title:'Supprimer définitivement ?',text:'« '+p.name+' » et ses '+n+' prix enregistrés seront effacés pour toujours. Cette action ne peut pas être annulée.',ok:'Supprimer définitivement',danger:true,onOk:function(){
+    purgeLocal(ean);queue({type:'product_delete',ean:ean});toast('Produit supprimé définitivement.');go('list');
+  }});
+}
 function cmpLine(label,cur,v){
   if(v==null)return '';
   if(isNaN(v)||v<0)return '<div class="up">'+label+' : montant invalide</div>';
@@ -1057,21 +1118,23 @@ function updateCmp(){
 }
 
 function rayonCounts(){
-  var c={},tot=0,arch=0;
+  var c={},tot=0,arch=0,trash=0;
   Object.keys(S.products).forEach(function(e){
     var p=S.products[e];
+    if(p.deleted_at){trash++;return;}
     if(p.archived_at){arch++;return;}
     tot++;var r=p.rayon||'Sans rayon';c[r]=(c[r]||0)+1;
   });
-  return {by:c,total:tot,archived:arch};
+  return {by:c,total:tot,archived:arch,trash:trash};
 }
 function vList(){
   var q=S.q.trim().toLowerCase();
   var all=Object.keys(S.products).map(function(e){return S.products[e];});
   var cn=rayonCounts();
   var items=all.filter(function(p){
-    if(S.rayon==='Archivés'){if(!p.archived_at)return false;}
-    else{if(p.archived_at)return false;if(S.rayon!=='Tous'&&p.rayon!==S.rayon)return false;}
+    if(S.rayon==='Corbeille'){if(!p.deleted_at)return false;}
+    else if(S.rayon==='Archivés'){if(!p.archived_at||p.deleted_at)return false;}
+    else{if(p.archived_at||p.deleted_at)return false;if(S.rayon!=='Tous'&&p.rayon!==S.rayon)return false;}
     return !q||p.name.toLowerCase().indexOf(q)>=0||p.ean.indexOf(q)>=0||(p.brand||'').toLowerCase().indexOf(q)>=0;
   }).sort(function(a,b){return a.name.localeCompare(b.name,'fr');});
   var h='<div class="wrap"><h1 class="h1">Produits</h1><div class="toolbar">';
@@ -1097,6 +1160,7 @@ function openRayonSheet(){
   var h=opt('Tous',cn.total);
   used.forEach(function(r){h+=opt(r,cn.by[r]);});
   if(cn.archived)h+=opt('Archivés',cn.archived);
+  if(cn.trash)h+=opt('Corbeille',cn.trash);
   if(empty.length){h+='<p class="rsep">Rayons sans produit</p>';empty.forEach(function(r){h+=opt(r,0,'empty');});}
   document.getElementById('sheetlist').innerHTML=h;
   var sh=document.getElementById('sheet');sh.hidden=false;
@@ -1253,10 +1317,10 @@ function saveEdit(){
 }
 function logout(){
   var n=pendingCount();
-  if(n&&!confirm(n+' enregistrement(s) pas encore envoyé(s). Ils resteront sur ce téléphone et partiront à la prochaine connexion. Se déconnecter quand même ?'))return;
-  if(!n&&!confirm('Se déconnecter ?'))return;
-  sb.auth.signOut().then(function(){},function(){});
-  S.screen='login';S.reset=true;render();
+  askConfirm({title:'Se déconnecter ?',text:n?n+' enregistrement'+(n>1?'s':'')+' pas encore envoyé'+(n>1?'s':'')+' : ils restent sur ce téléphone et partiront à la prochaine connexion.':'Vous devrez saisir à nouveau votre email et votre mot de passe.',ok:'Se déconnecter',onOk:function(){
+    sb.auth.signOut().then(function(){},function(){});
+    S.screen='login';S.reset=true;render();
+  }});
 }
 
 document.addEventListener('click',function(e){
@@ -1286,7 +1350,11 @@ document.addEventListener('click',function(e){
   else if(a==='restore')archiveProduct(false);
   else if(a==='delete')deleteProduct();
   else if(a==='savecfg')saveCfg();
-  else if(a==='resetcfg'){if(confirm('Effacer la configuration de ce téléphone ?')){localStorage.removeItem(K.cfg);S.screen='setup';S.reset=true;render();}}
+  else if(a==='resetcfg'){askConfirm({title:'Changer la configuration ?',text:'L’adresse et la clé de ce téléphone seront effacées.',ok:'Effacer',onOk:function(){localStorage.removeItem(K.cfg);S.screen='setup';S.reset=true;render();}});}
+  else if(a==='dlgok')closeDlg(true);
+  else if(a==='dlgno')closeDlg(false);
+  else if(a==='restoretrash')restoreTrash();
+  else if(a==='purgenow')purgeNow();
   else if(a==='login')login();
   else if(a==='logout')logout();
   else if(a==='syncnow')sync();
@@ -1301,7 +1369,7 @@ document.addEventListener('change',function(e){if(e.target.id==='n-rayon')S.rayo
 /* Douchette : elle tape le code comme un clavier puis Entrée ou Tab */
 var buf='',bufT=0;
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){closeSheet();}
+  if(e.key==='Escape'){closeSheet();closeDlg(false);}
   var t=e.target,tag=t&&t.tagName;
   if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
     if(t.id==='code'&&(e.key==='Enter'||e.key==='Tab')&&t.value.trim()){e.preventDefault();handleCode(t.value);}
